@@ -22,7 +22,7 @@ console = Console()
 @app.command()
 def search(
     keyword: str,
-    format: str = typer.Option(None, "--format", "-f", help="Output format: markdown or path"),
+    output_format: str = typer.Option(None, "--format", "-f", help="Output format: markdown or path"),
     time_range: str = typer.Option(None, "--time-range", "-t", help="Time range: day/week/month/year"),
     max_results: int = typer.Option(None, "--max-results", "-m", help="Max results"),
     searxng_url: str = typer.Option(None, "--searxng-url", "-s", help="SearXNG URL"),
@@ -39,8 +39,8 @@ def search(
 
     # Build CLI args dict (only non-None values)
     cli_args = {}
-    if format is not None:
-        cli_args["format"] = format
+    if output_format is not None:
+        cli_args["format"] = output_format
     if time_range is not None:
         cli_args["time_range"] = time_range
     if max_results is not None:
@@ -70,7 +70,11 @@ def search(
     if verbose:
         console.print(Panel(f"Searching: {keyword}", title="KB Search"))
 
-    results = engine.search(keyword, config)
+    try:
+        results = engine.search(keyword, config)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
     # Output
     if config["format"] == "path":
