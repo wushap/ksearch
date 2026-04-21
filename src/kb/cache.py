@@ -16,6 +16,8 @@ TIME_RANGE_SQL = {
     "year": "datetime('now', '-365 days')",
 }
 
+VALID_TIME_RANGES = {"day", "week", "month", "year"}
+
 
 def hash_url(url: str) -> str:
     """Generate SHA256 hash for URL."""
@@ -119,13 +121,13 @@ class CacheManager:
     def partial_match(
         self,
         keyword: str,
-        time_range: str = None,
+        time_range: str | None = None,
     ) -> list[CacheEntry]:
         """Find entries with partial keyword match."""
         sql = "SELECT * FROM cache WHERE keyword LIKE ?"
         params = [f"%{keyword}%"]
 
-        if time_range and time_range in TIME_RANGE_SQL:
+        if time_range and time_range in VALID_TIME_RANGES:
             sql += f" AND cached_date >= {TIME_RANGE_SQL[time_range]}"
 
         with sqlite3.connect(self.db_path) as conn:
