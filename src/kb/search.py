@@ -114,28 +114,32 @@ class SearchEngine:
         keyword: str,
     ) -> Optional[ResultEntry]:
         """Process single result: convert -> store."""
-        content = self.converter.convert_url(result.url)
+        try:
+            content = self.converter.convert_url(result.url)
 
-        if not content:
+            if not content:
+                return None
+
+            file_path = self.cache.save(
+                url=result.url,
+                content=content,
+                keyword=keyword,
+                metadata={
+                    "title": result.title,
+                    "engine": result.engine,
+                    "published_date": result.published_date,
+                },
+            )
+
+            return ResultEntry(
+                url=result.url,
+                title=result.title,
+                content=content,
+                file_path=file_path,
+                cached=False,
+                source=result.engine,
+                cached_date="",
+            )
+        except Exception:
+            # Individual failure, return None to continue processing other results
             return None
-
-        file_path = self.cache.save(
-            url=result.url,
-            content=content,
-            keyword=keyword,
-            metadata={
-                "title": result.title,
-                "engine": result.engine,
-                "published_date": result.published_date,
-            },
-        )
-
-        return ResultEntry(
-            url=result.url,
-            title=result.title,
-            content=content,
-            file_path=file_path,
-            cached=False,
-            source=result.engine,
-            cached_date="",
-        )
