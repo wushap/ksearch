@@ -1,4 +1,4 @@
-"""Data models for kb package."""
+"""Data models for ksearch package."""
 
 from dataclasses import dataclass
 

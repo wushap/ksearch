@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from kb.searxng import SearXNGClient
-from kb.models import SearchResult
+from ksearch.searxng import SearXNGClient
+from ksearch.models import SearchResult
 
 
 def test_searxng_client_init():

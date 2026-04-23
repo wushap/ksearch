@@ -1,4 +1,4 @@
-# KB - 个人知识库 CLI 工具
+# ksearch - 个人知识库 CLI 工具
 
 结合本地知识库缓存和网络搜索的 Python CLI 工具。
 
@@ -26,49 +26,49 @@ uv pip install -e .
 ### 基本搜索
 
 ```bash
-kb search "关键词"
+ksearch python
 ```
 
 ### 仅搜索本地缓存
 
 ```bash
-kb search "关键词" --only-cache
+ksearch --only-cache python
 ```
 
 ### 强制网络搜索（忽略缓存）
 
 ```bash
-kb search "关键词" --no-cache
+ksearch --no-cache rust
 ```
 
 ### 时间范围搜索
 
 ```bash
-kb search "AI 最新进展" --time-range week    # 一周内
-kb search "技术趋势" --time-range month      # 一个月内
+ksearch --time-range week AI    # 一周内
+ksearch --time-range month 趋势 # 一个月内
 ```
 
 ### 输出文件路径
 
 ```bash
-kb search "关键词" --format path
+ksearch --format path python
 ```
 
 ### 详细输出
 
 ```bash
-kb search "关键词" --verbose
+ksearch --verbose python
 ```
 
 ## 配置
 
-配置文件位于 `~/.kb/config.json`：
+配置文件位于 `~/.ksearch/config.json`：
 
 ```json
 {
   "searxng_url": "http://localhost:48888",
-  "store_dir": "~/.kb/store",
-  "index_db": "~/.kb/index.db",
+  "store_dir": "~/.ksearch/store",
+  "index_db": "~/.ksearch/index.db",
   "max_results": 10,
   "timeout": 30,
   "format": "markdown",
@@ -82,8 +82,8 @@ kb search "关键词" --verbose
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `searxng_url` | SearXNG 实例地址 | `http://localhost:48888` |
-| `store_dir` | Markdown 文件存储目录 | `~/.kb/store` |
-| `index_db` | SQLite 索引数据库路径 | `~/.kb/index.db` |
+| `store_dir` | Markdown 文件存储目录 | `~/.ksearch/store` |
+| `index_db` | SQLite 索引数据库路径 | `~/.ksearch/index.db` |
 | `max_results` | 最大搜索结果数 | `10` |
 | `timeout` | 网络请求超时（秒） | `30` |
 | `format` | 输出格式 (`markdown`/`path`) | `markdown` |
@@ -104,8 +104,8 @@ kb search "关键词" --verbose
 ## 项目结构
 
 ```
-kb/
-├── src/kb/
+ksearch/
+├── src/ksearch/
 │   ├── __main__.py    # CLI 入口
 │   ├── models.py      # 数据结构
 │   ├── config.py      # 配置管理
@@ -129,7 +129,7 @@ kb/
 
 3. **转换存储**
    - 使用 markitdown 转换为 Markdown
-   - 存储到 `~/.kb/store/`
+   - 存储到 `~/.ksearch/store/`
    - 更新 SQLite 索引
 
 4. **输出结果**
@@ -152,7 +152,7 @@ uv sync
 uv run pytest tests/ -v
 
 # 运行 CLI
-uv run kb search "test"
+uv run ksearch python
 ```
 
 ## License

@@ -3,10 +3,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-from kb.cache import CacheManager
-from kb.searxng import SearXNGClient
-from kb.converter import ContentConverter
-from kb.models import ResultEntry, SearchResult
+from ksearch.cache import CacheManager
+from ksearch.searxng import SearXNGClient
+from ksearch.converter import ContentConverter
+from ksearch.models import ResultEntry, SearchResult
 
 
 class SearchEngine:

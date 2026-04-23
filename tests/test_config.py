@@ -5,7 +5,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from kb.config import (
+from ksearch.config import (
     DEFAULT_CONFIG,
     load_config,
     merge_config,
