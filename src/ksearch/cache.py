@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from kb.models import CacheEntry
+from ksearch.models import CacheEntry
 
 
 TIME_RANGE_SQL = {

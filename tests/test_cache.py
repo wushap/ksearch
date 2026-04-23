@@ -4,8 +4,8 @@ import tempfile
 import os
 import sqlite3
 
-from kb.cache import CacheManager
-from kb.models import CacheEntry
+from ksearch.cache import CacheManager
+from ksearch.models import CacheEntry
 
 
 def test_cache_manager_init():

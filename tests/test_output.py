@@ -1,7 +1,7 @@
 """Tests for kb.output module."""
 
-from kb.output import format_markdown, format_paths
-from kb.models import ResultEntry
+from ksearch.output import format_markdown, format_paths
+from ksearch.models import ResultEntry
 
 
 def test_format_markdown_with_cached_results():

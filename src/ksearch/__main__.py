@@ -1,19 +1,19 @@
-"""CLI entry point for kb."""
+"""CLI entry point for ksearch."""
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from kb.config import load_config, merge_config, DEFAULT_CONFIG, init_default_config
-from kb.cache import CacheManager
-from kb.searxng import SearXNGClient
-from kb.converter import ContentConverter
-from kb.search import SearchEngine
-from kb.output import format_markdown, format_paths
+from ksearch.config import load_config, merge_config, DEFAULT_CONFIG
+from ksearch.cache import CacheManager
+from ksearch.searxng import SearXNGClient
+from ksearch.converter import ContentConverter
+from ksearch.search import SearchEngine
+from ksearch.output import format_markdown, format_paths
 
 
 app = typer.Typer(
-    name="kb",
+    name="ksearch",
     help="Personal knowledge base with web search",
 )
 console = Console()
@@ -35,7 +35,7 @@ def search(
 ):
     """Search for keyword in cache and/or network."""
     # Load config file
-    file_config = load_config("~/.kb/config.json")
+    file_config = load_config("~/.ksearch/config.json")
 
     # Build CLI args dict (only non-None values)
     cli_args = {}
@@ -68,7 +68,7 @@ def search(
 
     # Execute search
     if verbose:
-        console.print(Panel(f"Searching: {keyword}", title="KB Search"))
+        console.print(Panel(f"Searching: {keyword}", title="ksearch"))
 
     try:
         results = engine.search(keyword, config)

@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock, patch
 
-from kb.converter import ContentConverter
+from ksearch.converter import ContentConverter
 
 
 def test_content_converter_init():
@@ -14,7 +14,7 @@ def test_content_converter_convert_url_success():
     mock_result = Mock()
     mock_result.text_content = "# Converted Content\n\nThis is markdown."
 
-    with patch("kb.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
@@ -26,7 +26,7 @@ def test_content_converter_convert_url_success():
 
 
 def test_content_converter_convert_url_failure():
-    with patch("kb.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.side_effect = Exception("Conversion failed")
         mock_md_class.return_value = mock_md

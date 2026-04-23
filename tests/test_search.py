@@ -4,11 +4,11 @@ import tempfile
 import os
 from unittest.mock import Mock, patch
 
-from kb.search import SearchEngine
-from kb.cache import CacheManager
-from kb.searxng import SearXNGClient
-from kb.converter import ContentConverter
-from kb.models import SearchResult, ResultEntry
+from ksearch.search import SearchEngine
+from ksearch.cache import CacheManager
+from ksearch.searxng import SearXNGClient
+from ksearch.converter import ContentConverter
+from ksearch.models import SearchResult, ResultEntry
 
 
 def test_search_engine_exact_match_no_network():

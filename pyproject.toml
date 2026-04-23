@@ -1,5 +1,5 @@
 [project]
-name = "kb"
+name = "ksearch"
 version = "0.1.0"
 description = "Personal knowledge base with web search - CLI tool"
 requires-python = ">=3.10"
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kb = "kb.__main__:main"
+ksearch = "ksearch.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

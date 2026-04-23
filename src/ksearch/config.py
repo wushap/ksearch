@@ -1,4 +1,4 @@
-"""Configuration management for kb package."""
+"""Configuration management for ksearch package."""
 
 import json
 import os
@@ -7,8 +7,8 @@ from pathlib import Path
 
 DEFAULT_CONFIG = {
     "searxng_url": "http://localhost:48888",
-    "store_dir": "~/.kb/store",
-    "index_db": "~/.kb/index.db",
+    "store_dir": "~/.ksearch/store",
+    "index_db": "~/.ksearch/index.db",
     "max_results": 10,
     "timeout": 30,
     "format": "markdown",
@@ -32,7 +32,7 @@ def init_default_config(config_path: str) -> None:
         json.dump(DEFAULT_CONFIG, f, indent=2)
 
 
-def load_config(config_path: str = "~/.kb/config.json") -> dict:
+def load_config(config_path: str = "~/.ksearch/config.json") -> dict:
     """Load config from file, return defaults if file doesn't exist."""
     config_path = expand_path(config_path)
 
