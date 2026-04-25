@@ -101,6 +101,66 @@ ksearch --verbose python
 | `--only-cache` | | 仅搜索缓存 |
 | `--verbose` | `-v` | 详细输出 |
 
+## 最优配置推荐
+
+根据测试结果，以下配置在不同场景下表现最佳：
+
+### 快速搜索（推荐默认）
+
+```json
+{
+  "max_results": 5,
+  "timeout": 30
+}
+```
+
+- **max_results=5**: 平衡速度与结果数量，约 2秒完成
+- **timeout=30**: 足够处理大多数网站，避免过早超时
+
+### 深度搜索
+
+```json
+{
+  "max_results": 10,
+  "timeout": 60
+}
+```
+
+- **max_results=10**: 获取更多结果，约 8秒完成
+- **timeout=60**: 处理慢速网站或大型文档
+
+### 时间敏感搜索
+
+```bash
+# 搜索最新内容
+ksearch --time-range week "news topic"
+ksearch --time-range day "breaking news"
+```
+
+### 程序集成
+
+```bash
+# 输出文件路径供其他工具处理
+ksearch --format path "topic" | xargs cat
+ksearch --format path "topic" | head -1 | vim
+```
+
+### 配置优先级
+
+```
+CLI 参数 > 配置文件 > 默认值
+```
+
+建议：将常用配置写入 `~/.ksearch/config.json`，临时调整使用 CLI 参数。
+
+### 性能参考
+
+| max_results | 实际结果 | 耗时 | 适用场景 |
+|-------------|----------|------|----------|
+| 3 | ~2条 | 6秒 | 快速确认 |
+| 5 | ~4条 | 2秒 | **日常推荐** |
+| 10 | ~7条 | 8秒 | 深度研究 |
+
 ## 项目结构
 
 ```
