@@ -118,8 +118,24 @@ When user requests a search:
 
 - Requires SearXNG instance running (default: http://localhost:48888)
 - Cache stored at `~/.ksearch/store/`
-- Index database at `~/.ksearch/index.db`
+- **Keyword index files at `~/.ksearch/store/_index/`** - JSON files per keyword for direct lookup
+- Index database at `~/.ksearch/index.db` (SQLite backup)
 - Config file at `~/.ksearch/config.json`
+
+### Keyword Index Structure
+
+Each keyword has its own JSON index file:
+
+```json
+{
+  "keyword": "python",
+  "entries": [
+    {"url": "...", "file_hash": "abc123", "title": "...", "cached_date": "2026-04-25"}
+  ]
+}
+```
+
+Browse `_index/` directory to quickly find cached content by keyword without querying SQLite.
 
 ## Error Handling
 
