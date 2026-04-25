@@ -104,18 +104,37 @@ ksearch --verbose python
 ## 项目结构
 
 ```
-ksearch/
-├── src/ksearch/
-│   ├── __main__.py    # CLI 入口
-│   ├── models.py      # 数据结构
-│   ├── config.py      # 配置管理
-│   ├── cache.py       # SQLite + 文件缓存
-│   ├── searxng.py     # SearXNG API
-│   ├── converter.py   # markitdown 转换
-│   ├── search.py      # 搜索编排
-│   └── output.py      # 输出格式化
-└── tests/             # 单元测试
+~/.ksearch/
+├── store/                  # Markdown 文件存储
+│   ├── abc123.md           # URL hash 作为文件名
+│   ├── def456.md
+│   └── _index/             # 关键词索引目录
+│       ├── python.json     # python 关键词索引
+│       ├── rust.json       # rust 关键词索引
+│       └── ...
+└── index.db                # SQLite 主索引
 ```
+
+### 关键词索引文件结构
+
+每个关键词索引文件 (`_index/<keyword>.json`) 包含：
+
+```json
+{
+  "keyword": "python",
+  "entries": [
+    {
+      "url": "https://...",
+      "file_hash": "abc123",
+      "title": "...",
+      "cached_date": "2026-04-25",
+      "engine": "google, brave"
+    }
+  ]
+}
+```
+
+可以通过关键词索引文件直接定位相关缓存内容，无需查询 SQLite。
 
 ## 搜索流程
 
