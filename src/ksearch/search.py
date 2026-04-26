@@ -1,5 +1,6 @@
 """Search orchestration module."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from ksearch.cache import CacheManager
@@ -8,7 +9,7 @@ from ksearch.converter import ContentConverter
 from ksearch.models import ResultEntry, SearchResult
 
 
-# Known slow URLs to skip (video sites, streaming, etc.)
+# Known slow/problematic URLs to skip
 SKIP_URL_PATTERNS = [
     "youtube.com",
     "youtu.be",
@@ -16,11 +17,12 @@ SKIP_URL_PATTERNS = [
     "tiktok.com",
     "dailymotion.com",
     "twitch.tv",
+    "sputniknews.cn",  # Known to timeout
 ]
 
 
 def should_skip_url(url: str) -> bool:
-    """Check if URL should be skipped (known slow sites)."""
+    """Check if URL should be skipped."""
     for pattern in SKIP_URL_PATTERNS:
         if pattern in url.lower():
             return True
@@ -116,48 +118,16 @@ class SearchEngine:
         """Convert URLs to Markdown and store in cache."""
         entries = []
 
-        # Sequential conversion with timeout per URL (safer)
+        # Converter handles timeout internally, just process sequentially
         for result in results:
             try:
-                entry = self._process_result_with_timeout(result, keyword, timeout)
+                entry = self._process_result(result, keyword)
                 if entry:
                     entries.append(entry)
             except Exception:
                 continue
 
         return entries
-
-    def _process_result_with_timeout(
-        self,
-        result: SearchResult,
-        keyword: str,
-        timeout: int,
-    ) -> Optional[ResultEntry]:
-        """Process single result with timeout using thread."""
-        import threading
-
-        entry = None
-        exception = None
-
-        def worker():
-            nonlocal entry, exception
-            try:
-                entry = self._process_result(result, keyword)
-            except Exception as e:
-                exception = e
-
-        thread = threading.Thread(target=worker)
-        thread.start()
-        thread.join(timeout=timeout)
-
-        if thread.is_alive():
-            # Thread still running, timed out
-            return None
-
-        if exception:
-            return None
-
-        return entry
 
     def _process_result(
         self,
