@@ -138,21 +138,42 @@ class ContentConverter:
 
     def __init__(self, timeout: int = 30):
         self.timeout = timeout
+        # Per-URL timeout should be shorter (10s) to avoid blocking
+        self.url_timeout = min(timeout, 10)
         self._md = MarkItDown()
 
     def convert_url(self, url: str) -> str:
         """Convert URL content to Markdown and clean noise."""
-        try:
-            result = self._md.convert(url)
-            raw_content = result.text_content
+        import threading
 
-            # Clean the content
-            cleaned = clean_content(raw_content)
+        result_container = []
+        exception_container = []
 
-            # Return empty if too short after cleaning (redirect pages)
-            if len(cleaned) < 50:
-                return ""
+        def worker():
+            try:
+                result = self._md.convert(url)
+                result_container.append(result.text_content)
+            except Exception as e:
+                exception_container.append(e)
 
-            return cleaned
-        except Exception:
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(timeout=self.url_timeout)
+
+        if thread.is_alive():
+            # Timed out - thread still running
             return ""
+
+        if exception_container:
+            return ""
+
+        raw_content = result_container[0] if result_container else ""
+
+        # Clean the content
+        cleaned = clean_content(raw_content)
+
+        # Return empty if too short after cleaning (redirect pages)
+        if len(cleaned) < 50:
+            return ""
+
+        return cleaned
