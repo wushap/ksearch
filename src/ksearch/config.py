@@ -16,6 +16,15 @@ DEFAULT_CONFIG = {
     "no_cache": False,
     "only_cache": False,
     "verbose": False,
+    # Knowledge base settings
+    "kb_mode": "",  # "chroma", "qdrant", or "" (disabled)
+    "kb_dir": "~/.ksearch/kb",
+    "kb_top_k": 5,
+    "qdrant_url": "http://localhost:6333",
+    # Embedding settings
+    "embedding_mode": "ollama",
+    "embedding_model": "nomic-embed-text",
+    "ollama_url": "http://localhost:11434",
 }
 
 
@@ -60,7 +69,7 @@ def merge_config(cli_args: dict, file_config: dict, defaults: dict) -> dict:
             result[key] = value
 
     # Expand paths after merging
-    for path_key in ["store_dir", "index_db"]:
+    for path_key in ["store_dir", "index_db", "kb_dir"]:
         if path_key in result:
             result[path_key] = expand_path(result[path_key])
 
