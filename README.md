@@ -1,15 +1,18 @@
 # ksearch - 个人知识库 CLI 工具
 
-结合本地知识库缓存和网络搜索的 Python CLI 工具。
+结合本地知识库、语义检索和网络搜索的 Python CLI 工具。
 
 ## 特性
 
-- **缓存优先搜索**：精确匹配关键词直接返回本地缓存结果，无需网络请求
+- **语义检索**：基于向量数据库的知识库检索 (Chroma/Qdrant)
+- **本地优先**：支持导入本地 Markdown 文件进行语义搜索
+- **缓存优先搜索**：精确匹配关键词直接返回本地缓存结果
 - **智能补充**：部分匹配时自动发起网络搜索补充新结果
 - **自动转换存储**：所有网络搜索结果自动转换为 Markdown 格式并缓存
 - **时间范围过滤**：支持 `day`/`week`/`month`/`year` 时间范围搜索
 - **灵活输出**：支持结构化 Markdown 输出或纯文件路径输出
 - **配置灵活**：JSON 配置文件 + CLI 参数覆盖
+- **Docker 支持**：一键部署完整服务栈 (Qdrant + SearXNG + Ollama)
 
 ## 安装
 
@@ -19,6 +22,28 @@ uv sync
 
 # 或全局安装
 uv pip install -e .
+
+# 安装可选依赖
+uv pip install -e ".[qdrant]"   # Qdrant 向量库
+uv pip install -e ".[ollama]"   # Ollama SDK
+uv pip install -e ".[crawl4ai]" # Crawl4AI 异步爬虫
+uv pip install -e ".[all]"      # 全部可选依赖
+```
+
+## Docker 部署
+
+```bash
+# 启动完整服务栈
+docker compose up -d
+
+# 服务列表:
+# - Qdrant (向量数据库): http://localhost:6333
+# - SearXNG (搜索引擎): http://localhost:48888
+# - Ollama (本地LLM): http://localhost:11434
+# - Open WebUI (可选): http://localhost:3000 (--profile webui)
+
+# 拉取 Ollama embedding 模型
+docker exec ksearch-ollama ollama pull nomic-embed-text
 ```
 
 ## 使用
@@ -60,6 +85,34 @@ ksearch --format path python
 ksearch --verbose python
 ```
 
+### 知识库操作
+
+```bash
+# 导入本地文件
+ksearch kb ingest ~/notes/ --source logseq --verbose
+
+# 导入单个文件
+ksearch kb ingest ~/docs/readme.md --source manual
+
+# 语义搜索知识库
+ksearch kb search "异步编程最佳实践" --top-k 5
+
+# 查看知识库统计
+ksearch kb list
+
+# 删除文件相关条目
+ksearch kb delete ~/old-notes/test.md
+
+# 清空知识库
+ksearch kb clear --confirm
+```
+
+### 检查服务状态
+
+```bash
+ksearch health
+```
+
 ## 配置
 
 配置文件位于 `~/.ksearch/config.json`：
@@ -75,7 +128,14 @@ ksearch --verbose python
   "time_range": "",
   "no_cache": false,
   "only_cache": false,
-  "verbose": false
+  "verbose": false,
+  "kb_mode": "chroma",
+  "kb_dir": "~/.ksearch/kb",
+  "kb_top_k": 5,
+  "qdrant_url": "http://localhost:6333",
+  "embedding_mode": "ollama",
+  "embedding_model": "nomic-embed-text",
+  "ollama_url": "http://localhost:11434"
 }
 ```
 
@@ -87,6 +147,11 @@ ksearch --verbose python
 | `max_results` | 最大搜索结果数 | `10` |
 | `timeout` | 网络请求超时（秒） | `30` |
 | `format` | 输出格式 (`markdown`/`path`) | `markdown` |
+| `kb_mode` | KB 模式 (`chroma`/`qdrant`) | `chroma` |
+| `kb_dir` | KB 数据目录 | `~/.ksearch/kb` |
+| `kb_top_k` | KB 搜索结果数 | `5` |
+| `embedding_mode` | Embedding 模式 (`ollama`/`sentence-transformers`) | `ollama` |
+| `embedding_model` | Embedding 模型 | `nomic-embed-text` |
 
 ## CLI 参数
 
@@ -165,14 +230,16 @@ CLI 参数 > 配置文件 > 默认值
 
 ```
 ~/.ksearch/
-├── store/                  # Markdown 文件存储
+├── store/                  # Markdown 文件存储 (网络搜索缓存)
 │   ├── abc123.md           # URL hash 作为文件名
 │   ├── def456.md
 │   └── _index/             # 关键词索引目录
 │       ├── python.json     # python 关键词索引
-│       ├── rust.json       # rust 关键词索引
 │       └── ...
-└── index.db                # SQLite 主索引
+├── kb/                     # 知识库向量数据库
+│   chroma.sqlite3          # Chroma 嵌入式数据库
+│   or qdrant collections   # Qdrant 服务端存储
+└── index.db                # SQLite 主索引 (URL缓存)
 ```
 
 ### 关键词索引文件结构
@@ -197,6 +264,21 @@ CLI 参数 > 配置文件 > 默认值
 可以通过关键词索引文件直接定位相关缓存内容，无需查询 SQLite。
 
 ## 搜索流程
+
+### 知识库搜索流程 (kb search)
+
+1. **生成查询向量**
+   - 调用 Ollama 或 sentence-transformers 生成 embedding
+
+2. **向量检索**
+   - Chroma: 本地嵌入式查询
+   - Qdrant: HTTP API 查询 (支持元数据过滤)
+
+3. **返回结果**
+   - 按相似度排序的文档片段
+   - 包含原文路径、标题、来源等元数据
+
+### 网络搜索流程 (search)
 
 1. **查询本地缓存**
    - 精确匹配 → 直接返回缓存结果

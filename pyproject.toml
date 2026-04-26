@@ -1,6 +1,6 @@
 [project]
 name = "ksearch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Personal knowledge base with web search - CLI tool"
 requires-python = ">=3.10"
 dependencies = [
@@ -8,6 +8,19 @@ dependencies = [
     "rich>=13.0.0",
     "requests>=2.28.0",
     "markitdown>=0.0.1a2",
+    # Optional dependencies for knowledge base
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+]
+
+[project.optional-dependencies]
+qdrant = ["qdrant-client>=1.7.0"]
+ollama = ["ollama>=0.1.0"]
+crawl4ai = ["crawl4ai>=0.3.0"]
+all = [
+    "ksearch[qdrant]",
+    "ksearch[ollama]",
+    "ksearch[crawl4ai]",
 ]
 
 [project.scripts]
@@ -19,5 +32,10 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 dev-dependencies = [
+    "pytest>=8.0.0",
+]
+
+[dependency-groups]
+dev = [
     "pytest>=8.0.0",
 ]
