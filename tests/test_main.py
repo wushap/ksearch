@@ -68,3 +68,43 @@ def test_search_command_accepts_kb_dir_for_only_cache_flow():
 
         assert result.exit_code == 0
         assert "KB Doc" in result.output
+
+
+def test_kb_reset_command_reinitializes_kb(monkeypatch):
+    """Reset command should build the KB with explicit embedding settings and clear it."""
+
+    class FakeKB:
+        last_init = None
+        reset_called = False
+
+        def __init__(self, **kwargs):
+            FakeKB.last_init = kwargs
+
+        def reset(self):
+            FakeKB.reset_called = True
+
+    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
+
+    result = runner.invoke(
+        app,
+        [
+            "kb",
+            "reset",
+            "--confirm",
+            "--mode",
+            "chroma",
+            "--kb-dir",
+            "/tmp/test-kb",
+            "--embedding-model",
+            "mxbai-embed-large",
+            "--embedding-dimension",
+            "1024",
+            "--ollama-url",
+            "http://localhost:11434",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert FakeKB.reset_called is True
+    assert FakeKB.last_init["embedding_model"] == "mxbai-embed-large"
+    assert FakeKB.last_init["embedding_dimension"] == 1024

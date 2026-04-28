@@ -61,6 +61,7 @@ ksearch kb search "异步编程最佳实践" --top-k 5
 ksearch kb list
 ksearch kb delete ~/old-notes/test.md
 ksearch kb clear --confirm
+ksearch kb reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
 ```
 
 ## 迭代式 KB-first 搜索
@@ -83,6 +84,22 @@ ksearch search "how does asyncio cancellation propagate" --kb chroma --iterative
 
 - `--iterative` 需要同时启用 `--kb chroma` 或 `--kb qdrant`
 - 迭代模式会保留网页结果缓存，因此后续搜索可复用这些内容
+
+## Embedding 模型切换
+
+知识库向量的 `embedding_model` 和 `embedding_dimension` 必须和入库时保持一致。
+
+- 修改 embedding 模型或维度后，旧 KB 不能继续混用
+- `ksearch` 现在会为 KB 写入元数据，并在模型或维度不匹配时报错
+- 发生切换时，先执行显式重置，再重新摄入文档
+
+示例：
+
+```bash
+ksearch config --embedding-model mxbai-embed-large --embedding-dimension 1024
+ksearch kb reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
+ksearch kb ingest ~/notes --source logseq
+```
 
 ## Docker 部署
 
@@ -121,6 +138,7 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
   "kb_top_k": 5,
   "qdrant_url": "http://localhost:6333",
   "embedding_model": "nomic-embed-text",
+  "embedding_dimension": 768,
   "ollama_url": "http://localhost:11434",
   "iterative_enabled": false,
   "max_iterations": 5,
@@ -155,6 +173,8 @@ CLI 参数 > 配置文件 > 默认值
 - `--no-cache`: 忽略网页缓存，强制抓取网络结果
 - `--only-cache`: 只返回网页缓存
 - `--kb`: 启用 KB 搜索，值为 `chroma`、`qdrant` 或 `none`
+- `--embedding-model`: 指定 KB 使用的 embedding 模型
+- `--embedding-dimension`: 指定 KB 使用的 embedding 维度
 - `--iterative`: 启用迭代式 KB-first 搜索
 - `--verbose`, `-v`: 打印详细信息
 

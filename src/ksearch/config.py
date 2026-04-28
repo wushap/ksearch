@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
     # Embedding settings
     "embedding_mode": "ollama",
     "embedding_model": "nomic-embed-text",
+    "embedding_dimension": 768,
     "ollama_url": "http://localhost:11434",
     # Iterative search settings
     "iterative_enabled": False,

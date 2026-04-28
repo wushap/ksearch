@@ -195,3 +195,75 @@ class TestKnowledgeBaseChunking:
         # Should try to break at periods
         for chunk in chunks:
             assert len(chunk) <= 60  # Allow slight overflow for sentence boundary
+
+
+class TestKnowledgeBaseMetadata:
+    def test_init_writes_metadata_file(self):
+        """KB initialization should persist embedding metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kb = KnowledgeBase(
+                mode="chroma",
+                persist_dir=tmpdir,
+                embedding_model="nomic-embed-text",
+                embedding_dimension=768,
+            )
+
+            metadata_path = os.path.join(tmpdir, "_kb_metadata.json")
+            assert os.path.exists(metadata_path)
+            assert kb.embedding_dimension == 768
+
+    def test_reopen_with_same_metadata_succeeds(self):
+        """Reopening a KB with matching embedding settings should work."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            KnowledgeBase(
+                mode="chroma",
+                persist_dir=tmpdir,
+                embedding_model="nomic-embed-text",
+                embedding_dimension=768,
+            )
+
+            reopened = KnowledgeBase(
+                mode="chroma",
+                persist_dir=tmpdir,
+                embedding_model="nomic-embed-text",
+                embedding_dimension=768,
+            )
+
+            assert reopened.embedding_model == "nomic-embed-text"
+            assert reopened.embedding_dimension == 768
+
+    def test_reopen_with_mismatched_dimension_requires_reset(self):
+        """Changing embedding dimension should fail until the KB is reset."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            KnowledgeBase(
+                mode="chroma",
+                persist_dir=tmpdir,
+                embedding_model="nomic-embed-text",
+                embedding_dimension=768,
+            )
+
+            with pytest.raises(ValueError, match="embedding dimension"):
+                KnowledgeBase(
+                    mode="chroma",
+                    persist_dir=tmpdir,
+                    embedding_model="nomic-embed-text",
+                    embedding_dimension=1024,
+                )
+
+    def test_reopen_with_mismatched_model_requires_reset(self):
+        """Changing embedding model should fail until the KB is reset."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            KnowledgeBase(
+                mode="chroma",
+                persist_dir=tmpdir,
+                embedding_model="nomic-embed-text",
+                embedding_dimension=768,
+            )
+
+            with pytest.raises(ValueError, match="embedding model"):
+                KnowledgeBase(
+                    mode="chroma",
+                    persist_dir=tmpdir,
+                    embedding_model="mxbai-embed-large",
+                    embedding_dimension=768,
+                )

@@ -19,6 +19,7 @@ def test_default_config_structure():
     assert DEFAULT_CONFIG["max_results"] == 10
     assert DEFAULT_CONFIG["format"] == "markdown"
     assert DEFAULT_CONFIG["iterative_enabled"] is False
+    assert DEFAULT_CONFIG["embedding_dimension"] == 768
     assert DEFAULT_CONFIG["max_iterations"] == 5
     assert DEFAULT_CONFIG["fact_threshold"] == 0.7
     assert DEFAULT_CONFIG["exploration_threshold"] == 0.4
@@ -96,3 +97,12 @@ def test_merge_config_applies_iterative_cli_override():
     assert result["iterative_enabled"] is True
     assert result["max_iterations"] == 2
     assert result["kb_mode"] == "chroma"
+
+
+def test_merge_config_preserves_embedding_dimension_override():
+    file_config = {"embedding_dimension": 1024}
+    cli_args = {"embedding_dimension": 768}
+
+    result = merge_config(cli_args, file_config, DEFAULT_CONFIG)
+
+    assert result["embedding_dimension"] == 768

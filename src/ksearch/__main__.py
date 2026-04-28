@@ -37,6 +37,7 @@ def build_kb(config: dict) -> KnowledgeBase:
         persist_dir=config.get("kb_dir", "~/.ksearch/kb"),
         qdrant_url=config.get("qdrant_url"),
         embedding_model=config.get("embedding_model", "nomic-embed-text"),
+        embedding_dimension=config.get("embedding_dimension", 768),
         ollama_url=config.get("ollama_url", "http://localhost:11434"),
     )
 
@@ -73,6 +74,9 @@ def search(
     kb_mode: str = typer.Option(None, "--kb", help="Include KB search: chroma, qdrant, or none"),
     kb_dir: str = typer.Option(None, "--kb-dir", help="Knowledge base directory"),
     qdrant_url: str = typer.Option(None, "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option(None, "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(None, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option(None, "--ollama-url", help="Ollama URL"),
     iterative: bool = typer.Option(False, "--iterative", help="Enable iterative KB-first search"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
@@ -102,6 +106,12 @@ def search(
         cli_args["kb_dir"] = kb_dir
     if qdrant_url is not None:
         cli_args["qdrant_url"] = qdrant_url
+    if embedding_model is not None:
+        cli_args["embedding_model"] = embedding_model
+    if embedding_dimension is not None:
+        cli_args["embedding_dimension"] = embedding_dimension
+    if ollama_url is not None:
+        cli_args["ollama_url"] = ollama_url
     cli_args["no_cache"] = no_cache
     cli_args["only_cache"] = only_cache
     cli_args["verbose"] = verbose
@@ -186,6 +196,9 @@ def kb_ingest(
     kb_mode: str = typer.Option("chroma", "--mode", "-m", help="KB mode: chroma or qdrant"),
     kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """Ingest files into knowledge base."""
@@ -195,6 +208,9 @@ def kb_ingest(
         mode=kb_mode,
         persist_dir=kb_dir,
         qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
     )
 
     metadata = {}
@@ -233,6 +249,9 @@ def kb_search(
     kb_mode: str = typer.Option("chroma", "--mode", "-m", help="KB mode: chroma or qdrant"),
     kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """Semantic search in knowledge base."""
@@ -240,6 +259,9 @@ def kb_search(
         mode=kb_mode,
         persist_dir=kb_dir,
         qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
     )
 
     if verbose:
@@ -288,12 +310,18 @@ def kb_list(
     kb_mode: str = typer.Option("chroma", "--mode", "-m", help="KB mode: chroma or qdrant"),
     kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
 ):
     """List knowledge base statistics."""
     kb = KnowledgeBase(
         mode=kb_mode,
         persist_dir=kb_dir,
         qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
     )
 
     count = kb.count()
@@ -316,6 +344,9 @@ def kb_clear(
     kb_mode: str = typer.Option("chroma", "--mode", "-m", help="KB mode: chroma or qdrant"),
     kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
     confirm: bool = typer.Option(False, "--confirm", help="Confirm clear"),
 ):
     """Clear knowledge base."""
@@ -327,6 +358,9 @@ def kb_clear(
         mode=kb_mode,
         persist_dir=kb_dir,
         qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
     )
 
     kb.clear()
@@ -339,16 +373,49 @@ def kb_delete(
     kb_mode: str = typer.Option("chroma", "--mode", "-m", help="KB mode: chroma or qdrant"),
     kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
 ):
     """Delete entries from a specific file."""
     kb = KnowledgeBase(
         mode=kb_mode,
         persist_dir=kb_dir,
         qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
     )
 
     kb.delete_by_file(file_path)
     console.print(f"[green]✓[/green] Deleted entries from {file_path}")
+
+
+@kb_app.command("reset")
+def kb_reset(
+    kb_mode: str = typer.Option("chroma", "--mode", "-m", help="KB mode: chroma or qdrant"),
+    kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
+    qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+    confirm: bool = typer.Option(False, "--confirm", help="Confirm KB reset"),
+):
+    """Reset knowledge base data after changing embedding settings."""
+    if not confirm:
+        console.print("[red]Use --confirm to reset[/red]")
+        raise typer.Exit(1)
+
+    kb = KnowledgeBase(
+        mode=kb_mode,
+        persist_dir=kb_dir,
+        qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
+    )
+    kb.reset()
+    console.print("[green]✓[/green] Knowledge base reset")
 
 
 # Config command
@@ -359,6 +426,8 @@ def config_cmd(
     searxng_url: str = typer.Option(None, "--searxng-url", "-s", help="Set SearXNG URL"),
     kb_mode: str = typer.Option(None, "--kb-mode", help="Set KB mode"),
     kb_dir: str = typer.Option(None, "--kb-dir", help="Set KB directory"),
+    embedding_model: str = typer.Option(None, "--embedding-model", help="Set embedding model"),
+    embedding_dimension: int = typer.Option(None, "--embedding-dimension", help="Set embedding dimension"),
     ollama_url: str = typer.Option(None, "--ollama-url", help="Set Ollama URL"),
 ):
     """Manage configuration."""
@@ -395,6 +464,10 @@ def config_cmd(
         config["kb_mode"] = kb_mode
     if kb_dir:
         config["kb_dir"] = kb_dir
+    if embedding_model:
+        config["embedding_model"] = embedding_model
+    if embedding_dimension is not None:
+        config["embedding_dimension"] = embedding_dimension
     if ollama_url:
         config["ollama_url"] = ollama_url
 

@@ -175,4 +175,5 @@ def get_embedder(config: dict) -> EmbeddingGenerator:
         mode=config.get("embedding_mode", "ollama"),
         model=config.get("embedding_model", "nomic-embed-text"),
         ollama_url=config.get("ollama_url", "http://localhost:11434"),
+        dimension=config.get("embedding_dimension", 768),
     )

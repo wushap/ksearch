@@ -72,6 +72,7 @@ class KnowledgeBase:
         persist_dir: str = "~/.ksearch/kb",
         qdrant_url: Optional[str] = None,
         embedding_model: str = "nomic-embed-text",
+        embedding_dimension: int = 768,
         ollama_url: str = "http://localhost:11434",
     ):
         """Initialize knowledge base.
@@ -81,12 +82,16 @@ class KnowledgeBase:
             persist_dir: Local directory for Chroma persistence
             qdrant_url: Qdrant server URL (required for qdrant mode)
             embedding_model: Ollama embedding model name
+            embedding_dimension: Expected embedding vector size
             ollama_url: Ollama server URL for embeddings
         """
         self.mode = mode
         self.persist_dir = expand_path(persist_dir)
         self.embedding_model = embedding_model
+        self.embedding_dimension = embedding_dimension
         self.ollama_url = ollama_url
+        self.collection_name = "knowledge_base"
+        self.metadata_path = os.path.join(self.persist_dir, "_kb_metadata.json")
 
         os.makedirs(self.persist_dir, exist_ok=True)
 
@@ -100,6 +105,8 @@ class KnowledgeBase:
         else:
             raise ValueError(f"Unknown mode: {mode}. Use 'chroma' or 'qdrant'")
 
+        self._validate_or_initialize_metadata()
+
     def _init_chroma(self):
         """Initialize Chroma embedded mode."""
         try:
@@ -111,7 +118,7 @@ class KnowledgeBase:
 
         self._client = chromadb.PersistentClient(path=self.persist_dir)
         self._collection = self._client.get_or_create_collection(
-            name="knowledge_base",
+            name=self.collection_name,
             metadata={"hnsw:space": "cosine"}
         )
 
@@ -129,16 +136,70 @@ class KnowledgeBase:
 
         # Create collection if not exists
         collections = self._client.get_collections().collections
-        collection_name = "knowledge_base"
+        collection_name = self.collection_name
         if collection_name not in [c.name for c in collections]:
-            # Default embedding dimension for nomic-embed-text: 768
             self._client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(
-                    size=768,
+                    size=self.embedding_dimension,
                     distance=Distance.Cosine
                 )
             )
+
+    def _expected_metadata(self) -> dict:
+        """Return metadata describing the current KB embedding configuration."""
+        return {
+            "mode": self.mode,
+            "embedding_model": self.embedding_model,
+            "embedding_dimension": self.embedding_dimension,
+        }
+
+    def _load_metadata(self) -> Optional[dict]:
+        """Load persisted KB metadata when present."""
+        if not os.path.exists(self.metadata_path):
+            return None
+
+        with open(self.metadata_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _write_metadata(self) -> None:
+        """Persist KB metadata for future compatibility checks."""
+        with open(self.metadata_path, "w", encoding="utf-8") as handle:
+            json.dump(self._expected_metadata(), handle, indent=2)
+
+    def _validate_or_initialize_metadata(self) -> None:
+        """Ensure the KB matches the configured embedding settings."""
+        metadata = self._load_metadata()
+        if metadata is None:
+            if self.count() > 0:
+                raise ValueError(
+                    "KB metadata is missing for a non-empty knowledge base. "
+                    "Reset the KB before changing embedding settings."
+                )
+            self._write_metadata()
+            return
+
+        stored_mode = metadata.get("mode")
+        stored_model = metadata.get("embedding_model")
+        stored_dimension = metadata.get("embedding_dimension")
+
+        if stored_mode and stored_mode != self.mode:
+            raise ValueError(
+                f"KB mode mismatch: stored '{stored_mode}', requested '{self.mode}'. "
+                "Reset the KB before switching modes."
+            )
+        if stored_model and stored_model != self.embedding_model:
+            raise ValueError(
+                f"KB embedding model mismatch: stored '{stored_model}', requested '{self.embedding_model}'. "
+                "Reset the KB before switching embedding model."
+            )
+        if stored_dimension and stored_dimension != self.embedding_dimension:
+            raise ValueError(
+                f"KB embedding dimension mismatch: stored '{stored_dimension}', requested '{self.embedding_dimension}'. "
+                "Reset the KB before switching embedding dimension."
+            )
+
+        self._write_metadata()
 
     def _get_embedding(self, text: str) -> list[float]:
         """Get embedding vector from Ollama or fallback."""
@@ -151,7 +212,13 @@ class KnowledgeBase:
                 timeout=30
             )
             if response.status_code == 200:
-                return response.json()["embedding"]
+                embedding = response.json()["embedding"]
+                if len(embedding) != self.embedding_dimension:
+                    raise ValueError(
+                        f"Embedding dimension mismatch for model '{self.embedding_model}': "
+                        f"expected {self.embedding_dimension}, got {len(embedding)}"
+                    )
+                return embedding
         except Exception:
             pass  # Fallback to local
 
@@ -159,11 +226,15 @@ class KnowledgeBase:
         try:
             from sentence_transformers import SentenceTransformer
             model = SentenceTransformer("all-MiniLM-L6-v2")
-            return model.encode(text).tolist()
+            embedding = model.encode(text).tolist()
+            if len(embedding) == self.embedding_dimension:
+                return embedding
         except ImportError:
-            # Last resort: Simple TF-IDF based hashing (not recommended)
-            # This provides very basic semantic matching
-            return self._simple_embedding(text)
+            pass
+
+        # Last resort: Simple TF-IDF based hashing (not recommended)
+        # This provides very basic semantic matching
+        return self._simple_embedding(text)
 
     def _simple_embedding(self, text: str) -> list[float]:
         """Simple embedding fallback when no ML models available.
@@ -171,10 +242,10 @@ class KnowledgeBase:
         Uses word frequency hashing - NOT for production use.
         """
         words = text.lower().split()
-        vec = [0.0] * 768
+        vec = [0.0] * self.embedding_dimension
         for word in words:
             hash_val = int(hashlib.md5(word.encode()).hexdigest()[:8], 16)
-            idx = hash_val % 768
+            idx = hash_val % self.embedding_dimension
             vec[idx] += 1.0
         # Normalize
         norm = sum(v * v for v in vec) ** 0.5
@@ -297,6 +368,7 @@ class KnowledgeBase:
 
         chunks = []
         start = 0
+        effective_overlap = min(chunk_overlap, max(chunk_size - 1, 0))
         while start < len(text):
             end = start + chunk_size
             chunk = text[start:end]
@@ -311,7 +383,10 @@ class KnowledgeBase:
                     end = start + break_point + 1
 
             chunks.append(chunk.strip())
-            start = end - chunk_overlap
+            next_start = end - effective_overlap
+            if next_start <= start:
+                next_start = end
+            start = next_start
 
         return [c for c in chunks if c]
 
@@ -363,7 +438,7 @@ class KnowledgeBase:
                 )
                 for e, emb, meta in zip(entries, embeddings, metadatas)
             ]
-            self._client.upsert(collection_name="knowledge_base", points=points)
+            self._client.upsert(collection_name=self.collection_name, points=points)
 
     def search(
         self,
@@ -428,7 +503,7 @@ class KnowledgeBase:
                 )
 
             results = self._client.search(
-                collection_name="knowledge_base",
+                collection_name=self.collection_name,
                 query_vector=embedding,
                 limit=top_k,
                 query_filter=filter_obj,
@@ -454,7 +529,7 @@ class KnowledgeBase:
         elif self.mode == "qdrant":
             try:
                 int_id = int(entry_id, 16) % (2**63)
-                self._client.delete(collection_name="knowledge_base", points_selector=[int_id])
+                self._client.delete(collection_name=self.collection_name, points_selector=[int_id])
             except ValueError:
                 pass
 
@@ -469,7 +544,7 @@ class KnowledgeBase:
         elif self.mode == "qdrant":
             from qdrant_client.models import Filter, FieldCondition, MatchValue
             self._client.delete(
-                collection_name="knowledge_base",
+                collection_name=self.collection_name,
                 points_selector=Filter(
                     must=[
                         FieldCondition(
@@ -485,22 +560,25 @@ class KnowledgeBase:
         if self.mode == "chroma":
             return self._collection.count()
         elif self.mode == "qdrant":
-            info = self._client.get_collection(collection_name="knowledge_base")
+            info = self._client.get_collection(collection_name=self.collection_name)
             return info.points_count
 
     def clear(self):
         """Clear all entries."""
         if self.mode == "chroma":
-            self._client.delete_collection(name="knowledge_base")
+            self._client.delete_collection(name=self.collection_name)
             self._collection = self._client.create_collection(
-                name="knowledge_base",
+                name=self.collection_name,
                 metadata={"hnsw:space": "cosine"}
             )
         elif self.mode == "qdrant":
-            self._client.delete_collection(collection_name="knowledge_base")
+            self._client.delete_collection(collection_name=self.collection_name)
             self._init_qdrant()
-            self._client.delete_collection(collection_name="knowledge_base")
-            self._init_qdrant()
+        self._write_metadata()
+
+    def reset(self):
+        """Reset KB contents and refresh compatibility metadata."""
+        self.clear()
 
     def list_sources(self) -> list[str]:
         """List all unique sources."""
@@ -518,7 +596,7 @@ class KnowledgeBase:
             offset = None
             while True:
                 batch, offset = self._client.scroll(
-                    collection_name="knowledge_base",
+                    collection_name=self.collection_name,
                     limit=100,
                     offset=offset,
                 )
