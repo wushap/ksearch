@@ -1,121 +1,108 @@
-# ksearch - 个人知识库 CLI 工具
+# ksearch
 
-结合本地知识库、语义检索和网络搜索的 Python CLI 工具。
+结合本地缓存、知识库检索和网络搜索的 Python CLI 工具。
 
 ## 特性
 
-- **语义检索**：基于向量数据库的知识库检索 (Chroma/Qdrant)
-- **本地优先**：支持导入本地 Markdown 文件进行语义搜索
-- **缓存优先搜索**：精确匹配关键词直接返回本地缓存结果
-- **智能补充**：部分匹配时自动发起网络搜索补充新结果
-- **自动转换存储**：所有网络搜索结果自动转换为 Markdown 格式并缓存
-- **时间范围过滤**：支持 `day`/`week`/`month`/`year` 时间范围搜索
-- **灵活输出**：支持结构化 Markdown 输出或纯文件路径输出
-- **配置灵活**：JSON 配置文件 + CLI 参数覆盖
-- **Docker 支持**：一键部署完整服务栈 (Qdrant + SearXNG + Ollama)
+- 缓存优先的网页搜索，避免重复抓取和转换
+- 基于 Chroma 或 Qdrant 的知识库语义检索
+- 可选的迭代式 KB-first 搜索：先查 KB，不足时再受限扩展网页并回灌 KB
+- 自动将网页内容转换为 Markdown 并写入本地缓存
+- 支持 Markdown 输出和纯路径输出
+- JSON 配置文件 + CLI 参数覆盖
 
 ## 安装
 
 ```bash
-# 使用 uv 安装依赖
 uv sync
-
-# 或全局安装
-uv pip install -e .
-
-# 安装可选依赖
-uv pip install -e ".[qdrant]"   # Qdrant 向量库
-uv pip install -e ".[ollama]"   # Ollama SDK
-uv pip install -e ".[crawl4ai]" # Crawl4AI 异步爬虫
-uv pip install -e ".[all]"      # 全部可选依赖
 ```
+
+可选依赖：
+
+```bash
+uv pip install -e ".[qdrant]"
+uv pip install -e ".[ollama]"
+uv pip install -e ".[crawl4ai]"
+uv pip install -e ".[all]"
+```
+
+## 基本使用
+
+标准搜索命令使用 `search` 子命令：
+
+```bash
+ksearch search "python asyncio"
+```
+
+常见选项：
+
+```bash
+ksearch search "rust async" --only-cache
+ksearch search "agent memory" --no-cache
+ksearch search "latest ai trends" --time-range week --max-results 5
+ksearch search "python asyncio" --format path
+ksearch search "vector database" --verbose
+```
+
+## 知识库搜索
+
+启用 KB 检索：
+
+```bash
+ksearch search "task cancellation" --kb chroma
+```
+
+只做知识库操作时使用 `kb` 子命令：
+
+```bash
+ksearch kb ingest ~/notes --source logseq --verbose
+ksearch kb ingest ~/docs/readme.md --source manual
+ksearch kb search "异步编程最佳实践" --top-k 5
+ksearch kb list
+ksearch kb delete ~/old-notes/test.md
+ksearch kb clear --confirm
+```
+
+## 迭代式 KB-first 搜索
+
+当你希望优先利用本地知识库，不足时再自动扩展网页结果并回灌 KB，可使用：
+
+```bash
+ksearch search "how does asyncio cancellation propagate" --kb chroma --iterative
+```
+
+迭代模式行为：
+
+1. 判断查询更偏向事实型还是探索型
+2. 先做 KB 搜索并计算充分性分数
+3. 若结果不足，则抓取新的网页结果
+4. 将网页内容转换为 Markdown、写入缓存，并直接摄入 KB
+5. 达到充分性、收敛条件或边界条件后停止
+
+限制与要求：
+
+- `--iterative` 需要同时启用 `--kb chroma` 或 `--kb qdrant`
+- 迭代模式会保留网页结果缓存，因此后续搜索可复用这些内容
 
 ## Docker 部署
 
 ```bash
-# 启动完整服务栈
 docker compose up -d
-
-# 服务列表:
-# - Qdrant (向量数据库): http://localhost:6333
-# - SearXNG (搜索引擎): http://localhost:48888
-# - Ollama (本地LLM): http://localhost:11434
-# - Open WebUI (可选): http://localhost:3000 (--profile webui)
-
-# 拉取 Ollama embedding 模型
 docker exec ksearch-ollama ollama pull nomic-embed-text
 ```
 
-## 使用
+默认服务：
 
-### 基本搜索
-
-```bash
-ksearch python
-```
-
-### 仅搜索本地缓存
-
-```bash
-ksearch --only-cache python
-```
-
-### 强制网络搜索（忽略缓存）
-
-```bash
-ksearch --no-cache rust
-```
-
-### 时间范围搜索
-
-```bash
-ksearch --time-range week AI    # 一周内
-ksearch --time-range month 趋势 # 一个月内
-```
-
-### 输出文件路径
-
-```bash
-ksearch --format path python
-```
-
-### 详细输出
-
-```bash
-ksearch --verbose python
-```
-
-### 知识库操作
-
-```bash
-# 导入本地文件
-ksearch kb ingest ~/notes/ --source logseq --verbose
-
-# 导入单个文件
-ksearch kb ingest ~/docs/readme.md --source manual
-
-# 语义搜索知识库
-ksearch kb search "异步编程最佳实践" --top-k 5
-
-# 查看知识库统计
-ksearch kb list
-
-# 删除文件相关条目
-ksearch kb delete ~/old-notes/test.md
-
-# 清空知识库
-ksearch kb clear --confirm
-```
-
-### 检查服务状态
-
-```bash
-ksearch health
-```
+- Qdrant: `http://localhost:6333`
+- SearXNG: `http://localhost:48888`
+- Ollama: `http://localhost:11434`
+- Open WebUI: `http://localhost:3000`（启用对应 profile 时）
 
 ## 配置
 
-配置文件位于 `~/.ksearch/config.json`：
+默认配置文件路径：`~/.ksearch/config.json`
+
+示例：
 
 ```json
 {
@@ -129,193 +116,50 @@ ksearch health
   "no_cache": false,
   "only_cache": false,
   "verbose": false,
-  "kb_mode": "chroma",
+  "kb_mode": "",
   "kb_dir": "~/.ksearch/kb",
   "kb_top_k": 5,
   "qdrant_url": "http://localhost:6333",
-  "embedding_mode": "ollama",
   "embedding_model": "nomic-embed-text",
-  "ollama_url": "http://localhost:11434"
+  "ollama_url": "http://localhost:11434",
+  "iterative_enabled": false,
+  "max_iterations": 5,
+  "max_time_seconds": 180,
+  "fact_threshold": 0.7,
+  "exploration_threshold": 0.4,
+  "scoring_weights": {
+    "vector": 0.4,
+    "count": 0.3,
+    "coverage": 0.3
+  }
 }
 ```
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `searxng_url` | SearXNG 实例地址 | `http://localhost:48888` |
-| `store_dir` | Markdown 文件存储目录 | `~/.ksearch/store` |
-| `index_db` | SQLite 索引数据库路径 | `~/.ksearch/index.db` |
-| `max_results` | 最大搜索结果数 | `10` |
-| `timeout` | 网络请求超时（秒） | `30` |
-| `format` | 输出格式 (`markdown`/`path`) | `markdown` |
-| `kb_mode` | KB 模式 (`chroma`/`qdrant`) | `chroma` |
-| `kb_dir` | KB 数据目录 | `~/.ksearch/kb` |
-| `kb_top_k` | KB 搜索结果数 | `5` |
-| `embedding_mode` | Embedding 模式 (`ollama`/`sentence-transformers`) | `ollama` |
-| `embedding_model` | Embedding 模型 | `nomic-embed-text` |
+优先级：
 
-## CLI 参数
-
-| 参数 | 简写 | 说明 |
-|------|------|------|
-| `--format` | `-f` | 输出格式 |
-| `--time-range` | `-t` | 时间范围 |
-| `--max-results` | `-m` | 最大结果数 |
-| `--searxng-url` | `-s` | SearXNG 地址 |
-| `--store-dir` | `-d` | 存储目录 |
-| `--no-cache` | | 强制网络搜索 |
-| `--only-cache` | | 仅搜索缓存 |
-| `--verbose` | `-v` | 详细输出 |
-
-## 最优配置推荐
-
-根据测试结果，以下配置在不同场景下表现最佳：
-
-### 快速搜索（推荐默认）
-
-```json
-{
-  "max_results": 5,
-  "timeout": 30
-}
-```
-
-- **max_results=5**: 平衡速度与结果数量，约 2秒完成
-- **timeout=30**: 足够处理大多数网站，避免过早超时
-
-### 深度搜索
-
-```json
-{
-  "max_results": 10,
-  "timeout": 60
-}
-```
-
-- **max_results=10**: 获取更多结果，约 8秒完成
-- **timeout=60**: 处理慢速网站或大型文档
-
-### 时间敏感搜索
-
-```bash
-# 搜索最新内容
-ksearch --time-range week "news topic"
-ksearch --time-range day "breaking news"
-```
-
-### 程序集成
-
-```bash
-# 输出文件路径供其他工具处理
-ksearch --format path "topic" | xargs cat
-ksearch --format path "topic" | head -1 | vim
-```
-
-### 配置优先级
-
-```
+```text
 CLI 参数 > 配置文件 > 默认值
 ```
 
-建议：将常用配置写入 `~/.ksearch/config.json`，临时调整使用 CLI 参数。
+## 关键参数
 
-### 性能参考
+搜索命令常用参数：
 
-| max_results | 实际结果 | 耗时 | 适用场景 |
-|-------------|----------|------|----------|
-| 3 | ~2条 | 6秒 | 快速确认 |
-| 5 | ~4条 | 2秒 | **日常推荐** |
-| 10 | ~7条 | 8秒 | 深度研究 |
+- `--format`, `-f`: `markdown` 或 `path`
+- `--time-range`, `-t`: `day` / `week` / `month` / `year`
+- `--max-results`, `-m`: 限制网页搜索结果数量
+- `--searxng-url`, `-s`: 指定 SearXNG 服务地址
+- `--store-dir`, `-d`: 指定缓存目录
+- `--index-db`: 指定 SQLite 索引路径
+- `--timeout`: 请求超时秒数
+- `--no-cache`: 忽略网页缓存，强制抓取网络结果
+- `--only-cache`: 只返回网页缓存
+- `--kb`: 启用 KB 搜索，值为 `chroma`、`qdrant` 或 `none`
+- `--iterative`: 启用迭代式 KB-first 搜索
+- `--verbose`, `-v`: 打印详细信息
 
-## 项目结构
-
-```
-~/.ksearch/
-├── store/                  # Markdown 文件存储 (网络搜索缓存)
-│   ├── abc123.md           # URL hash 作为文件名
-│   ├── def456.md
-│   └── _index/             # 关键词索引目录
-│       ├── python.json     # python 关键词索引
-│       └── ...
-├── kb/                     # 知识库向量数据库
-│   chroma.sqlite3          # Chroma 嵌入式数据库
-│   or qdrant collections   # Qdrant 服务端存储
-└── index.db                # SQLite 主索引 (URL缓存)
-```
-
-### 关键词索引文件结构
-
-每个关键词索引文件 (`_index/<keyword>.json`) 包含：
-
-```json
-{
-  "keyword": "python",
-  "entries": [
-    {
-      "url": "https://...",
-      "file_hash": "abc123",
-      "title": "...",
-      "cached_date": "2026-04-25",
-      "engine": "google, brave"
-    }
-  ]
-}
-```
-
-可以通过关键词索引文件直接定位相关缓存内容，无需查询 SQLite。
-
-## 搜索流程
-
-### 知识库搜索流程 (kb search)
-
-1. **生成查询向量**
-   - 调用 Ollama 或 sentence-transformers 生成 embedding
-
-2. **向量检索**
-   - Chroma: 本地嵌入式查询
-   - Qdrant: HTTP API 查询 (支持元数据过滤)
-
-3. **返回结果**
-   - 按相似度排序的文档片段
-   - 包含原文路径、标题、来源等元数据
-
-### 网络搜索流程 (search)
-
-1. **查询本地缓存**
-   - 精确匹配 → 直接返回缓存结果
-   - 部分匹配 → 输出缓存 + 发起网络搜索
-
-2. **网络搜索**
-   - 调用 SearXNG API
-   - 去重已缓存 URL
-
-3. **转换存储**
-   - 使用 markitdown 转换为 Markdown
-   - 存储到 `~/.ksearch/store/`
-   - 更新 SQLite 索引
-
-4. **输出结果**
-   - Markdown 格式：结构化输出 + 元数据
-   - Path 格式：仅输出文件路径
-
-## 依赖
-
-- Python 3.10+
-- [SearXNG](https://github.com/searxng/searxng) 实例
-- [markitdown](https://github.com/microsoft/markitdown) (Microsoft)
-
-## 开发
+## 验证
 
 ```bash
-# 安装开发依赖
-uv sync
-
-# 运行测试
-uv run pytest tests/ -v
-
-# 运行 CLI
-uv run ksearch python
+uv run pytest -q
 ```
-
-## License
-
-MIT

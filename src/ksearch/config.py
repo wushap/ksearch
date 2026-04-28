@@ -1,8 +1,8 @@
 """Configuration management for ksearch package."""
 
+import copy
 import json
 import os
-from pathlib import Path
 
 
 DEFAULT_CONFIG = {
@@ -25,6 +25,13 @@ DEFAULT_CONFIG = {
     "embedding_mode": "ollama",
     "embedding_model": "nomic-embed-text",
     "ollama_url": "http://localhost:11434",
+    # Iterative search settings
+    "iterative_enabled": False,
+    "max_iterations": 5,
+    "max_time_seconds": 180,
+    "fact_threshold": 0.7,
+    "exploration_threshold": 0.4,
+    "scoring_weights": {"vector": 0.4, "count": 0.3, "coverage": 0.3},
 }
 
 
@@ -46,19 +53,19 @@ def load_config(config_path: str = "~/.ksearch/config.json") -> dict:
     config_path = expand_path(config_path)
 
     if not os.path.exists(config_path):
-        return DEFAULT_CONFIG.copy()
+        return copy.deepcopy(DEFAULT_CONFIG)
 
     try:
         with open(config_path) as f:
             file_config = json.load(f)
         return file_config
     except json.JSONDecodeError:
-        return DEFAULT_CONFIG.copy()
+        return copy.deepcopy(DEFAULT_CONFIG)
 
 
 def merge_config(cli_args: dict, file_config: dict, defaults: dict) -> dict:
     """Merge configs with priority: CLI > file > defaults."""
-    result = defaults.copy()
+    result = copy.deepcopy(defaults)
 
     for key, value in file_config.items():
         if key in result and value is not None:

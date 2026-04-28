@@ -1,5 +1,7 @@
 # KB CLI 工具设计文档
 
+> Superseded by `docs/superpowers/specs/2026-04-28-ksearch-iterative-search-design.md` for the current `ksearch` architecture.
+
 > 个人知识库 + 网络搜索 Python CLI 工具
 
 ## 概述

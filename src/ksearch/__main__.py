@@ -9,10 +9,11 @@ from ksearch.config import load_config, merge_config, DEFAULT_CONFIG, expand_pat
 from ksearch.cache import CacheManager
 from ksearch.searxng import SearXNGClient
 from ksearch.converter import ContentConverter
+from ksearch.embeddings import EmbeddingGenerator
 from ksearch.search import SearchEngine
 from ksearch.output import format_markdown, format_paths
-from ksearch.kb import KnowledgeBase, KBSearchResult
-from ksearch.embeddings import EmbeddingGenerator
+from ksearch.kb import KnowledgeBase
+from ksearch.models import ResultEntry
 
 
 app = typer.Typer(
@@ -28,6 +29,35 @@ app.add_typer(kb_app, name="kb")
 console = Console()
 
 
+def build_kb(config: dict) -> KnowledgeBase:
+    """Build a knowledge base instance from merged config."""
+    kb_mode = config.get("kb_mode") or "chroma"
+    return KnowledgeBase(
+        mode=kb_mode,
+        persist_dir=config.get("kb_dir", "~/.ksearch/kb"),
+        qdrant_url=config.get("qdrant_url"),
+        embedding_model=config.get("embedding_model", "nomic-embed-text"),
+        ollama_url=config.get("ollama_url", "http://localhost:11434"),
+    )
+
+
+def kb_results_to_entries(results: list) -> list[ResultEntry]:
+    """Convert KB search results into output entries."""
+    entries = []
+    for result in results:
+        preview = result.content[:500] + "..." if len(result.content) > 500 else result.content
+        entries.append(ResultEntry(
+            url=f"kb://{result.id}",
+            title=result.title or result.file_path,
+            content=preview,
+            file_path=result.file_path,
+            cached=True,
+            source=f"kb:{result.source or 'local'}",
+            cached_date=result.metadata.get("created_at", "") if result.metadata else "",
+        ))
+    return entries
+
+
 @app.command()
 def search(
     keyword: str,
@@ -41,6 +71,9 @@ def search(
     no_cache: bool = typer.Option(False, "--no-cache", help="Skip cache, force network"),
     only_cache: bool = typer.Option(False, "--only-cache", help="Only search cache"),
     kb_mode: str = typer.Option(None, "--kb", help="Include KB search: chroma, qdrant, or none"),
+    kb_dir: str = typer.Option(None, "--kb-dir", help="Knowledge base directory"),
+    qdrant_url: str = typer.Option(None, "--qdrant-url", help="Qdrant URL"),
+    iterative: bool = typer.Option(False, "--iterative", help="Enable iterative KB-first search"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """Search for keyword in cache, KB, and/or network."""
@@ -65,9 +98,14 @@ def search(
         cli_args["timeout"] = timeout
     if kb_mode is not None:
         cli_args["kb_mode"] = kb_mode
+    if kb_dir is not None:
+        cli_args["kb_dir"] = kb_dir
+    if qdrant_url is not None:
+        cli_args["qdrant_url"] = qdrant_url
     cli_args["no_cache"] = no_cache
     cli_args["only_cache"] = only_cache
     cli_args["verbose"] = verbose
+    cli_args["iterative_enabled"] = iterative
 
     # Merge configs
     config = merge_config(cli_args, file_config, DEFAULT_CONFIG)
@@ -81,47 +119,50 @@ def search(
     if verbose:
         console.print(Panel(f"Searching: {keyword}", title="ksearch"))
 
-    all_results = []
-
-    # KB search (if enabled)
-    kb_mode_value = config.get("kb_mode")
-    if kb_mode_value and kb_mode_value != "none":
+    # Iterative KB-first search
+    if config.get("iterative_enabled"):
+        from ksearch.iterative import IterativeSearchEngine
+        kb_mode_value = config.get("kb_mode")
+        if not kb_mode_value or kb_mode_value == "none":
+            console.print("[red]Iterative search requires --kb mode (chroma or qdrant)[/red]")
+            raise typer.Exit(1)
         try:
-            kb = KnowledgeBase(
-                mode=kb_mode_value,
-                persist_dir=config.get("kb_dir", "~/.ksearch/kb"),
-            )
-            kb_results = kb.search(keyword, top_k=config.get("kb_top_k", 5))
-
-            if kb_results and verbose:
-                console.print(f"[cyan]KB: {len(kb_results)} results[/cyan]")
-
-            # Convert KB results to ResultEntry format
-            for r in kb_results:
-                from ksearch.models import ResultEntry
-                all_results.append(ResultEntry(
-                    url=f"kb://{r.id}",
-                    title=r.title or r.file_path,
-                    content=r.content[:500] + "..." if len(r.content) > 500 else r.content,
-                    file_path=r.file_path,
-                    cached=True,
-                    source=f"kb:{r.source or 'local'}",
-                    cached_date=r.metadata.get("created_at"),
-                ))
-        except Exception as e:
+            kb = build_kb(config)
+            iterative_engine = IterativeSearchEngine(kb, searxng, converter, cache, config)
+            all_results = iterative_engine.search(keyword)
             if verbose:
-                console.print(f"[yellow]KB search failed: {e}[/yellow]")
-
-    # Web/cache search
-    if not config.get("only_kb", False):
-        try:
-            web_results = engine.search(keyword, config)
-            if web_results and verbose:
-                console.print(f"[cyan]Web: {len(web_results)} results[/cyan]")
-            all_results.extend(web_results)
+                console.print(f"[green]✓[/green] Iterative search: {len(all_results)} results")
         except Exception as e:
-            if verbose:
-                console.print(f"[red]Web search error: {e}[/red]")
+            console.print(f"[red]Iterative search error: {e}[/red]")
+            raise typer.Exit(1)
+    else:
+        all_results = []
+
+        # KB search (if enabled)
+        kb_mode_value = config.get("kb_mode")
+        if kb_mode_value and kb_mode_value != "none":
+            try:
+                kb = build_kb(config)
+                kb_results = kb.search(keyword, top_k=config.get("kb_top_k", 5))
+
+                if kb_results and verbose:
+                    console.print(f"[cyan]KB: {len(kb_results)} results[/cyan]")
+
+                all_results.extend(kb_results_to_entries(kb_results))
+            except Exception as e:
+                if verbose:
+                    console.print(f"[yellow]KB search failed: {e}[/yellow]")
+
+        # Web/cache search
+        if not config.get("only_kb", False):
+            try:
+                web_results = engine.search(keyword, config)
+                if web_results and verbose:
+                    console.print(f"[cyan]Web: {len(web_results)} results[/cyan]")
+                all_results.extend(web_results)
+            except Exception as e:
+                if verbose:
+                    console.print(f"[red]Web search error: {e}[/red]")
 
     # Output
     if config["format"] == "path":
@@ -395,8 +436,6 @@ def health_check(
 
     # Simple embedder
     table.add_row("Simple Embedder", "[green]✓[/green]", "Always available")
-
-    console.print(table)
 
     # Check SearXNG
     try:

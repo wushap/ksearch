@@ -69,3 +69,69 @@ def test_converter_returns_empty_for_short_content():
         result = converter.convert_url("https://example.com/redirect")
 
         assert result == ""
+
+
+def test_convert_url_prefers_main_content_extraction():
+    """Prefer extracted article body over raw full-page conversion when available."""
+    response = Mock()
+    response.text = "<html><body><article><h1>Title</h1><p>Main content only.</p></article></body></html>"
+    response.raise_for_status = Mock()
+
+    with patch("ksearch.converter.requests.get", return_value=response), patch(
+        "ksearch.converter.trafilatura_extract",
+        return_value="# Title\n\nMain content only with enough detail to pass the length threshold.",
+    ), patch("ksearch.converter.MarkItDown") as mock_md_class:
+        mock_md = Mock()
+        mock_md_class.return_value = mock_md
+
+        converter = ContentConverter()
+        result = converter.convert_url("https://example.com/article")
+
+        assert "Main content only" in result
+        mock_md.convert.assert_not_called()
+
+
+def test_convert_url_falls_back_to_markitdown_when_extraction_unavailable():
+    """Fallback to markitdown when main-content extraction does not produce usable text."""
+    response = Mock()
+    response.text = "<html><body>Fallback page</body></html>"
+    response.raise_for_status = Mock()
+
+    mock_result = Mock()
+    mock_result.text_content = "# Converted Content\n\nThis is markdown content that should be preserved after cleaning."
+
+    with patch("ksearch.converter.requests.get", return_value=response), patch(
+        "ksearch.converter.trafilatura_extract",
+        return_value="too short",
+    ), patch("ksearch.converter.MarkItDown") as mock_md_class:
+        mock_md = Mock()
+        mock_md.convert.return_value = mock_result
+        mock_md_class.return_value = mock_md
+
+        converter = ContentConverter()
+        result = converter.convert_url("https://example.com/article")
+
+        assert "# Converted Content" in result
+        mock_md.convert.assert_called_once()
+
+
+def test_clean_content_removes_comment_and_signup_boilerplate():
+    content = """# Title
+
+Main article paragraph with actual substance.
+
+## 9 Comments
+
+Add a comment
+
+Sign up to request clarification or add additional context in comments.
+
+Post Your Answer
+"""
+
+    cleaned = clean_content(content)
+
+    assert "Main article paragraph" in cleaned
+    assert "## 9 Comments" not in cleaned
+    assert "Add a comment" not in cleaned
+    assert "Post Your Answer" not in cleaned

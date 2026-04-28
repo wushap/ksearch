@@ -18,6 +18,15 @@ def test_default_config_structure():
     assert "store_dir" in DEFAULT_CONFIG
     assert DEFAULT_CONFIG["max_results"] == 10
     assert DEFAULT_CONFIG["format"] == "markdown"
+    assert DEFAULT_CONFIG["iterative_enabled"] is False
+    assert DEFAULT_CONFIG["max_iterations"] == 5
+    assert DEFAULT_CONFIG["fact_threshold"] == 0.7
+    assert DEFAULT_CONFIG["exploration_threshold"] == 0.4
+    assert DEFAULT_CONFIG["scoring_weights"] == {
+        "vector": 0.4,
+        "count": 0.3,
+        "coverage": 0.3,
+    }
 
 
 def test_init_default_config():
@@ -66,3 +75,24 @@ def test_merge_config_file_overrides_default():
     result = merge_config(cli_args, file_config, DEFAULT_CONFIG)
     assert result["timeout"] == 60
     assert result["max_results"] == 10  # from default
+
+
+def test_merge_config_preserves_iterative_defaults():
+    result = merge_config({}, {}, DEFAULT_CONFIG)
+
+    assert result["iterative_enabled"] is False
+    assert result["max_iterations"] == 5
+    assert result["max_time_seconds"] == 180
+    assert result["fact_threshold"] == 0.7
+    assert result["exploration_threshold"] == 0.4
+
+
+def test_merge_config_applies_iterative_cli_override():
+    file_config = {"kb_mode": "chroma"}
+    cli_args = {"iterative_enabled": True, "max_iterations": 2}
+
+    result = merge_config(cli_args, file_config, DEFAULT_CONFIG)
+
+    assert result["iterative_enabled"] is True
+    assert result["max_iterations"] == 2
+    assert result["kb_mode"] == "chroma"

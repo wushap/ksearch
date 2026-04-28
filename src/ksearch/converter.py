@@ -1,7 +1,14 @@
 """Content converter using markitdown with noise cleaning."""
 
 import re
+
+import requests
 from markitdown import MarkItDown
+
+try:
+    from trafilatura import extract as trafilatura_extract
+except ImportError:
+    trafilatura_extract = None
 
 
 # Lines that are clearly navigation/boilerplate (single line patterns)
@@ -29,6 +36,14 @@ NOISE_LINE_PATTERNS = [
     r'^Menu$',
     r'^GO$',
     r'^Search This Site',
+    r'^Add a comment$',
+    r'^Post Your Answer$',
+    r'^Reply$',
+    r'^Copy link$',
+    r'^Loading…$',
+    r'^Loading\.\.\.$',
+    r'^Sorry, something went wrong\.$',
+    r'^Uh oh!$',
     r'^\*×\*$',
     r'^\*\*A A\*\*$',
     r'^Smaller$',
@@ -69,8 +84,44 @@ NOISE_BLOCK_PATTERNS = [
     r'sponsored.*',
 ]
 
+# Section headings or prompts where article content is usually over
+NOISE_SECTION_PATTERNS = [
+    r'^##\s+\d+\s+Comments?$',
+    r'^##\s+Comments?(?:\s*\(\d+\))?$',
+    r'^##\s+Related(?:\s+questions)?$',
+    r'^##\s+Your Answer$',
+    r'^##\s+Answers?$',
+    r'^Sign up to request clarification.*',
+    r'^To join this conversation.*',
+    r'^Already have an account\?$',
+    r'^Start asking to get answers$',
+    r'^Explore related questions$',
+    r'^Subscribe to RSS$',
+    r'^Footer$',
+]
+
 # Consecutive link block (nav menu)
 NAV_LINK_BLOCK = r'(\* \[[^\]]+\]\([^\)]+\)[\s]*){4,}'
+
+
+def _truncate_at_noise_sections(lines: list[str]) -> list[str]:
+    """Drop trailing discussion/footer sections once main content is present."""
+    contentful_lines = 0
+    truncated = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            contentful_lines += 1
+
+        if contentful_lines >= 3:
+            for pattern in NOISE_SECTION_PATTERNS:
+                if re.match(pattern, stripped, re.IGNORECASE):
+                    return truncated
+
+        truncated.append(line)
+
+    return truncated
 
 
 def clean_content(content: str) -> str:
@@ -120,6 +171,8 @@ def clean_content(content: str) -> str:
 
         cleaned_lines.append(line)
 
+    cleaned_lines = _truncate_at_noise_sections(cleaned_lines)
+
     # Rejoin and remove nav link blocks (list format)
     content = '\n'.join(cleaned_lines)
     content = re.sub(NAV_LINK_BLOCK, '', content)
@@ -141,9 +194,41 @@ class ContentConverter:
         # Per-URL timeout should be shorter (10s) to avoid blocking
         self.url_timeout = min(timeout, 10)
         self._md = MarkItDown()
+        self._headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            )
+        }
 
-    def convert_url(self, url: str) -> str:
-        """Convert URL content to Markdown and clean noise."""
+    def _extract_main_content(self, url: str) -> str:
+        """Fetch page HTML and extract the primary article body when possible."""
+        if trafilatura_extract is None:
+            return ""
+
+        try:
+            response = requests.get(url, headers=self._headers, timeout=self.url_timeout)
+            response.raise_for_status()
+        except Exception:
+            return ""
+
+        extracted = trafilatura_extract(
+            response.text,
+            url=url,
+            output_format="markdown",
+            include_comments=False,
+            include_tables=False,
+            favor_precision=True,
+            deduplicate=True,
+        )
+        if not extracted:
+            return ""
+
+        return clean_content(extracted)
+
+    def _convert_with_markitdown(self, url: str) -> str:
+        """Fallback conversion path using markitdown."""
         import threading
 
         result_container = []
@@ -168,9 +253,13 @@ class ContentConverter:
             return ""
 
         raw_content = result_container[0] if result_container else ""
+        return clean_content(raw_content)
 
-        # Clean the content
-        cleaned = clean_content(raw_content)
+    def convert_url(self, url: str) -> str:
+        """Convert URL content to Markdown and clean noise."""
+        cleaned = self._extract_main_content(url)
+        if len(cleaned) < 50:
+            cleaned = self._convert_with_markitdown(url)
 
         # Return empty if too short after cleaning (redirect pages)
         if len(cleaned) < 50:

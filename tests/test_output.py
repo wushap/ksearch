@@ -74,3 +74,33 @@ def test_format_paths_empty():
     output = format_paths([])
 
     assert output == ""
+
+
+def test_format_markdown_with_iterative_web_result_uses_network_section():
+    entries = [
+        ResultEntry(
+            url="/kb/path",
+            title="KB Article",
+            content="KB content",
+            file_path="/kb/path",
+            cached=True,
+            source="kb",
+            cached_date="2026-04-28",
+        ),
+        ResultEntry(
+            url="https://example.com/new",
+            title="Expanded Web Article",
+            content="Fetched from web",
+            file_path="/store/example.md",
+            cached=False,
+            source="web",
+            cached_date="",
+        ),
+    ]
+
+    output = format_markdown(entries, "iterative example")
+
+    assert "## 缓存结果 (1条)" in output
+    assert "## 网络搜索结果 (1条)" in output
+    assert "Expanded Web Article" in output
+    assert "/store/example.md" in output

@@ -528,3 +528,62 @@ class KnowledgeBase:
                 if offset is None:
                     break
             return list(sources)
+
+    def ingest_file_from_content(
+        self,
+        content: str,
+        metadata: dict = None,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200,
+    ) -> int:
+        """Ingest content directly into knowledge base (no file required).
+
+        Args:
+            content: Text content to ingest
+            metadata: Additional metadata (source, url, title, etc.)
+            chunk_size: Maximum chunk size in characters
+            chunk_overlap: Overlap between chunks
+
+        Returns:
+            Number of chunks ingested
+        """
+        if not content:
+            return 0
+
+        # Reuse persisted cache path when available; otherwise synthesize one.
+        source = metadata.get("source", "web") if metadata else "web"
+        url = metadata.get("url", "") if metadata else ""
+        title = metadata.get("title", "Untitled") if metadata else "Untitled"
+        provided_file_path = metadata.get("file_path") if metadata else None
+
+        # Use provided cache path when available, otherwise use URL or content hash.
+        if provided_file_path:
+            file_path = provided_file_path
+        elif url:
+            file_path = f"web:{url}"
+        else:
+            file_path = f"content:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+
+        # Chunk content
+        chunks = self._chunk_text(content, chunk_size, chunk_overlap)
+
+        entries = []
+        for i, chunk in enumerate(chunks):
+            entry_id = self._generate_id(file_path, chunk)
+            entry = KBEntry(
+                id=entry_id,
+                content=chunk,
+                file_path=file_path,
+                title=title,
+                source=source,
+                metadata={
+                    **(metadata or {}),
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                },
+            )
+            entries.append(entry)
+
+        # Store in vector DB
+        self._store_entries(entries)
+        return len(entries)
