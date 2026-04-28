@@ -133,3 +133,38 @@ def test_cache_manager_get_file_path():
 
         assert file_path.endswith(".md")
         assert store_dir in file_path
+
+
+def test_cache_manager_stats():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        store_dir = os.path.join(tmpdir, "store")
+
+        manager = CacheManager(db_path, store_dir)
+
+        manager.save(
+            url="https://example.com/python",
+            content="Python content",
+            keyword="python",
+            metadata={"title": "Python", "engine": "google"},
+        )
+        manager.save(
+            url="https://docs.example.com/asyncio",
+            content="Asyncio content",
+            keyword="asyncio",
+            metadata={"title": "Asyncio", "engine": "duckduckgo"},
+        )
+        manager.save(
+            url="https://example.com/advanced",
+            content="Advanced content",
+            keyword="python",
+            metadata={"title": "Advanced", "engine": "google"},
+        )
+
+        stats = manager.stats()
+
+        assert stats["total_entries"] == 3
+        assert stats["keyword_count"] == 2
+        assert stats["total_size_bytes"] > 0
+        assert stats["engines"]["google"] == 2
+        assert stats["domains"]["example.com"] == 2

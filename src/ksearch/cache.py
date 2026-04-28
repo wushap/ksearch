@@ -6,6 +6,7 @@ import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ksearch.models import CacheEntry
 
@@ -308,3 +309,41 @@ class CacheManager:
                 json.dump({"keyword": kw, "entries": entries}, f, indent=2, ensure_ascii=False)
 
         return len(keyword_entries)
+
+    def stats(self) -> dict:
+        """Summarize cache entry counts, size, keyword variety, and source distribution."""
+        total_entries = 0
+        keywords = set()
+        total_size_bytes = 0
+        engines: dict[str, int] = {}
+        domains: dict[str, int] = {}
+        missing_files = 0
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("SELECT url, file_path, keyword, engine FROM cache")
+
+            for row in cursor.fetchall():
+                total_entries += 1
+                keywords.add(row["keyword"])
+
+                engine = row["engine"] or "unknown"
+                engines[engine] = engines.get(engine, 0) + 1
+
+                domain = urlparse(row["url"]).netloc or "unknown"
+                domains[domain] = domains.get(domain, 0) + 1
+
+                file_path = row["file_path"]
+                if os.path.exists(file_path):
+                    total_size_bytes += os.path.getsize(file_path)
+                else:
+                    missing_files += 1
+
+        return {
+            "total_entries": total_entries,
+            "keyword_count": len(keywords),
+            "total_size_bytes": total_size_bytes,
+            "engines": dict(sorted(engines.items(), key=lambda item: (-item[1], item[0]))),
+            "domains": dict(sorted(domains.items(), key=lambda item: (-item[1], item[0]))),
+            "missing_files": missing_files,
+        }

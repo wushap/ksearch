@@ -29,6 +29,16 @@ app.add_typer(kb_app, name="kb")
 console = Console()
 
 
+def format_size(num_bytes: int) -> str:
+    """Format byte counts for human-readable output."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+
+
 def build_kb(config: dict) -> KnowledgeBase:
     """Build a knowledge base instance from merged config."""
     kb_mode = config.get("kb_mode") or "chroma"
@@ -57,6 +67,16 @@ def kb_results_to_entries(results: list) -> list[ResultEntry]:
             cached_date=result.metadata.get("created_at", "") if result.metadata else "",
         ))
     return entries
+
+
+def build_stats_table(title: str, rows: list[tuple[str, str]]) -> Table:
+    """Build a two-column stats table."""
+    table = Table(title=title)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+    for metric, value in rows:
+        table.add_row(metric, value)
+    return table
 
 
 @app.command()
@@ -184,6 +204,63 @@ def search(
 
     if verbose:
         console.print(f"[green]✓[/green] Total: {len(all_results)} results")
+
+
+@app.command("stats")
+def stats_cmd(
+    store_dir: str = typer.Option("~/.ksearch/store", "--store-dir", "-d", help="Store directory"),
+    index_db: str = typer.Option("~/.ksearch/index.db", "--index-db", help="Index database path"),
+    kb_mode: str = typer.Option("chroma", "--kb-mode", help="KB mode: chroma or qdrant"),
+    kb_dir: str = typer.Option("~/.ksearch/kb", "--kb-dir", help="KB directory"),
+    qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+    embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
+    embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
+    ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+):
+    """Show unified cache and knowledge base statistics."""
+    cache = CacheManager(expand_path(index_db), expand_path(store_dir))
+    cache_stats = cache.stats()
+
+    kb = KnowledgeBase(
+        mode=kb_mode,
+        persist_dir=kb_dir,
+        qdrant_url=qdrant_url if kb_mode == "qdrant" else None,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+        ollama_url=ollama_url,
+    )
+    kb_stats = kb.stats()
+
+    overview_rows = [
+        ("Cache entries", str(cache_stats.get("total_entries", 0))),
+        ("KB entries", str(kb_stats.get("total_entries", 0))),
+        ("Total knowledge items", str(cache_stats.get("total_entries", 0) + kb_stats.get("total_entries", 0))),
+        ("Keyword variety", str(cache_stats.get("keyword_count", 0))),
+        ("KB source files", str(kb_stats.get("source_file_count", 0))),
+        ("Total size", format_size(cache_stats.get("total_size_bytes", 0) + kb_stats.get("total_size_bytes", 0))),
+    ]
+    console.print(build_stats_table("Overview", overview_rows))
+
+    cache_rows = [
+        ("Entries", str(cache_stats.get("total_entries", 0))),
+        ("Keyword count", str(cache_stats.get("keyword_count", 0))),
+        ("Total size", format_size(cache_stats.get("total_size_bytes", 0))),
+        ("Missing files", str(cache_stats.get("missing_files", 0))),
+        ("Top domains", ", ".join(f"{name}:{count}" for name, count in list(cache_stats.get("domains", {}).items())[:5]) or "N/A"),
+        ("Engines", ", ".join(f"{name}:{count}" for name, count in list(cache_stats.get("engines", {}).items())[:5]) or "N/A"),
+    ]
+    console.print(build_stats_table("Cache Stats", cache_rows))
+
+    kb_rows = [
+        ("Entries", str(kb_stats.get("total_entries", 0))),
+        ("Source files", str(kb_stats.get("source_file_count", 0))),
+        ("Total size", format_size(kb_stats.get("total_size_bytes", 0))),
+        ("Mode", kb_stats.get("mode", "unknown")),
+        ("Embedding model", kb_stats.get("embedding_model", "unknown")),
+        ("Embedding dimension", str(kb_stats.get("embedding_dimension", "unknown"))),
+        ("Sources", ", ".join(f"{name}:{count}" for name, count in list(kb_stats.get("sources", {}).items())[:5]) or "N/A"),
+    ]
+    console.print(build_stats_table("Knowledge Base Stats", kb_rows))
 
 
 # KB subcommands

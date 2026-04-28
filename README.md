@@ -44,6 +44,12 @@ ksearch search "python asyncio" --format path
 ksearch search "vector database" --verbose
 ```
 
+查看统一统计：
+
+```bash
+ksearch stats
+```
+
 ## 知识库搜索
 
 启用 KB 检索：
@@ -177,6 +183,16 @@ CLI 参数 > 配置文件 > 默认值
 - `--embedding-dimension`: 指定 KB 使用的 embedding 维度
 - `--iterative`: 启用迭代式 KB-first 搜索
 - `--verbose`, `-v`: 打印详细信息
+
+统计命令会统一展示：
+
+- 当前缓存条数
+- KB 条数与源文件数
+- 总大小
+- 关键词种类数
+- 网站来源分布
+- 搜索引擎分布
+- KB source 分布与 embedding 配置
 
 ## 验证
 

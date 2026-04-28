@@ -267,3 +267,30 @@ class TestKnowledgeBaseMetadata:
                     embedding_model="mxbai-embed-large",
                     embedding_dimension=768,
                 )
+
+
+class TestKnowledgeBaseStats:
+    def test_stats_reports_chunks_files_sources_and_size(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            notes_dir = os.path.join(tmpdir, "notes")
+            os.makedirs(notes_dir, exist_ok=True)
+
+            file_one = os.path.join(notes_dir, "one.md")
+            file_two = os.path.join(notes_dir, "two.md")
+
+            with open(file_one, "w", encoding="utf-8") as handle:
+                handle.write("# One\n\nPython asyncio cancellation guidance.")
+            with open(file_two, "w", encoding="utf-8") as handle:
+                handle.write("# Two\n\nRust async cancellation guidance.")
+
+            kb = KnowledgeBase(mode="chroma", persist_dir=os.path.join(tmpdir, "kb"))
+            kb.ingest_file(file_one, metadata={"source": "manual"})
+            kb.ingest_file(file_two, metadata={"source": "web"})
+
+            stats = kb.stats()
+
+            assert stats["total_entries"] == 2
+            assert stats["source_file_count"] == 2
+            assert stats["total_size_bytes"] > 0
+            assert stats["sources"]["manual"] == 1
+            assert stats["sources"]["web"] == 1

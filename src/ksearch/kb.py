@@ -665,3 +665,50 @@ class KnowledgeBase:
         # Store in vector DB
         self._store_entries(entries)
         return len(entries)
+
+    def stats(self) -> dict:
+        """Summarize KB entries, source files, content size, and source distribution."""
+        if self.mode == "chroma":
+            results = self._collection.get(include=["metadatas"])
+            metadatas = results.get("metadatas", [])
+        elif self.mode == "qdrant":
+            metadatas = []
+            offset = None
+            while True:
+                batch, offset = self._client.scroll(
+                    collection_name=self.collection_name,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for point in batch:
+                    metadatas.append(point.payload or {})
+                if offset is None:
+                    break
+        else:
+            metadatas = []
+
+        file_paths = set()
+        sources: dict[str, int] = {}
+        total_size_bytes = 0
+
+        for meta in metadatas:
+            source = meta.get("source") or "local"
+            sources[source] = sources.get(source, 0) + 1
+
+            file_path = meta.get("file_path")
+            if file_path and file_path not in file_paths:
+                file_paths.add(file_path)
+                if os.path.exists(file_path):
+                    total_size_bytes += os.path.getsize(file_path)
+
+        return {
+            "total_entries": len(metadatas),
+            "source_file_count": len(file_paths),
+            "total_size_bytes": total_size_bytes,
+            "sources": dict(sorted(sources.items(), key=lambda item: (-item[1], item[0]))),
+            "mode": self.mode,
+            "embedding_model": self.embedding_model,
+            "embedding_dimension": self.embedding_dimension,
+        }

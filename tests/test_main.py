@@ -108,3 +108,45 @@ def test_kb_reset_command_reinitializes_kb(monkeypatch):
     assert FakeKB.reset_called is True
     assert FakeKB.last_init["embedding_model"] == "mxbai-embed-large"
     assert FakeKB.last_init["embedding_dimension"] == 1024
+
+
+def test_stats_command_prints_unified_sections(monkeypatch):
+    """Stats command should render overview, cache stats, and KB stats sections."""
+
+    class FakeCache:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def stats(self):
+            return {
+                "total_entries": 3,
+                "keyword_count": 2,
+                "total_size_bytes": 1200,
+                "engines": {"google": 2},
+                "domains": {"example.com": 2},
+            }
+
+    class FakeKB:
+        def __init__(self, **kwargs):
+            pass
+
+        def stats(self):
+            return {
+                "total_entries": 4,
+                "source_file_count": 2,
+                "total_size_bytes": 2400,
+                "sources": {"web": 3, "manual": 1},
+                "mode": "chroma",
+                "embedding_model": "nomic-embed-text",
+                "embedding_dimension": 768,
+            }
+
+    monkeypatch.setattr("ksearch.__main__.CacheManager", FakeCache)
+    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
+
+    result = runner.invoke(app, ["stats"])
+
+    assert result.exit_code == 0
+    assert "Overview" in result.output
+    assert "Cache Stats" in result.output
+    assert "Knowledge Base Stats" in result.output
