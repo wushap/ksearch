@@ -183,3 +183,18 @@ CLI 参数 > 配置文件 > 默认值
 ```bash
 uv run pytest -q
 ```
+
+真实环境端到端测试：
+
+```bash
+bash tests/ollama_e2e_integration.sh
+```
+
+这个脚本要求本机可访问：
+
+- Ollama: `http://localhost:11434`
+- SearXNG: `http://localhost:48888`
+- Ollama 中存在 `nomic-embed-text:latest`
+- 负例模型默认使用 `fredrezones55/qwen3.5-opus:9b`
+
+脚本会创建临时 KB 和临时测试文档，覆盖中英文和混合关键词检索、`--only-cache`、`--iterative`，并生成一份 markdown 报告。
