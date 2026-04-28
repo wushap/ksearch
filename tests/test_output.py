@@ -1,7 +1,7 @@
-"""Tests for kbase.output module."""
+"""Tests for ksearch.output module."""
 
-from kbase.output import format_markdown, format_paths
-from kbase.models import ResultEntry
+from ksearch.output import format_markdown, format_paths
+from ksearch.models import ResultEntry
 
 
 def test_format_markdown_with_cached_results():

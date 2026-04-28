@@ -9,11 +9,11 @@ Usage:
     kbase = KnowledgeBase(mode="qdrant", url="http://localhost:6333")  # Server mode
 
     # Ingest documents
-    kbase.ingest_file("~/docs/note.md", metadata={"source": "logseq"})
-    kbase.ingest_directory("~/notes/", glob_pattern="*.md")
+    ksearch.ingest_file("~/docs/note.md", metadata={"source": "logseq"})
+    ksearch.ingest_directory("~/notes/", glob_pattern="*.md")
 
     # Search
-    results = kbase.search("python async", top_k=5)
+    results = ksearch.search("python async", top_k=5)
 """
 
 import hashlib
@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from kbase.config import expand_path
+from ksearch.config import expand_path
 
 
 @dataclass
@@ -69,7 +69,7 @@ class KnowledgeBase:
     def __init__(
         self,
         mode: str = "chroma",
-        persist_dir: str = "~/.kbase/kbase",
+        persist_dir: str = "~/.ksearch/kbase",
         qdrant_url: Optional[str] = None,
         embedding_model: str = "nomic-embed-text",
         embedding_dimension: int = 768,

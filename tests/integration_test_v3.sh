@@ -1,11 +1,11 @@
 #!/bin/bash
-# kbase 集成测试脚本 v3
+# ksearch 集成测试脚本 v3
 # 测试多种关键词和配置组合
 
 set -e
 
 PROJECT_DIR="/home/lan/workspace/test/search/inc"
-RESULTS_DIR="/tmp/kbase-integration-results"
+RESULTS_DIR="/tmp/ksearch-integration-results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 mkdir -p "$RESULTS_DIR"
@@ -14,7 +14,7 @@ mkdir -p "$RESULTS_DIR"
 echo "keyword,max_results,timeout,elapsed_sec,total_count,cache_count,has_real_error" > "$RESULTS_DIR/results_${TIMESTAMP}.csv"
 
 echo "========================================"
-echo "kbase 集成测试 v3"
+echo "ksearch 集成测试 v3"
 echo "时间: $TIMESTAMP"
 echo "========================================"
 
@@ -32,7 +32,7 @@ test_search() {
 
     # 根据参数决定是否清理缓存
     if [ "$should_clean" = "YES" ]; then
-        rm -rf ~/.kbase/
+        rm -rf ~/.ksearch/
     fi
 
     local start_time=$(date +%s.%N)

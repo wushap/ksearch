@@ -1,8 +1,8 @@
-"""Tests for kbase.converter module."""
+"""Tests for ksearch.converter module."""
 
 from unittest.mock import Mock, patch
 
-from kbase.converter import ContentConverter, clean_content
+from ksearch.converter import ContentConverter, clean_content
 
 
 def test_content_converter_init():
@@ -15,7 +15,7 @@ def test_content_converter_convert_url_success():
     # Use longer content to pass minimum length check (50 chars)
     mock_result.text_content = "# Converted Content\n\nThis is markdown content that should be preserved after cleaning."
 
-    with patch("kbase.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
@@ -27,7 +27,7 @@ def test_content_converter_convert_url_success():
 
 
 def test_content_converter_convert_url_failure():
-    with patch("kbase.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.side_effect = Exception("Conversion failed")
         mock_md_class.return_value = mock_md
@@ -60,7 +60,7 @@ def test_converter_returns_empty_for_short_content():
     mock_result = Mock()
     mock_result.text_content = "Redirecting to </>..."  # Only 21 chars
 
-    with patch("kbase.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
@@ -77,10 +77,10 @@ def test_convert_url_prefers_main_content_extraction():
     response.text = "<html><body><article><h1>Title</h1><p>Main content only.</p></article></body></html>"
     response.raise_for_status = Mock()
 
-    with patch("kbase.converter.requests.get", return_value=response), patch(
-        "kbase.converter.trafilatura_extract",
+    with patch("ksearch.converter.requests.get", return_value=response), patch(
+        "ksearch.converter.trafilatura_extract",
         return_value="# Title\n\nMain content only with enough detail to pass the length threshold.",
-    ), patch("kbase.converter.MarkItDown") as mock_md_class:
+    ), patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md_class.return_value = mock_md
 
@@ -100,10 +100,10 @@ def test_convert_url_falls_back_to_markitdown_when_extraction_unavailable():
     mock_result = Mock()
     mock_result.text_content = "# Converted Content\n\nThis is markdown content that should be preserved after cleaning."
 
-    with patch("kbase.converter.requests.get", return_value=response), patch(
-        "kbase.converter.trafilatura_extract",
+    with patch("ksearch.converter.requests.get", return_value=response), patch(
+        "ksearch.converter.trafilatura_extract",
         return_value="too short",
-    ), patch("kbase.converter.MarkItDown") as mock_md_class:
+    ), patch("ksearch.converter.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md

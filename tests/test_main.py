@@ -1,21 +1,21 @@
-"""Tests for kbase CLI entry points."""
+"""Tests for ksearch CLI entry points."""
 
 import os
 import tempfile
 
 from typer.testing import CliRunner
 
-from kbase.__main__ import app
+from ksearch.__main__ import app
 
 
 runner = CliRunner()
 
 
-def test_app_help_uses_kbase_as_primary_name():
+def test_app_help_uses_ksearch_as_primary_name():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "kbase" in result.output
+    assert "ksearch" in result.output
 
 
 def test_health_command_runs_without_name_error(monkeypatch):
@@ -36,7 +36,7 @@ def test_health_command_runs_without_name_error(monkeypatch):
     class FakeResponse:
         status_code = 200
 
-    monkeypatch.setattr("kbase.__main__.EmbeddingGenerator", FakeEmbedder)
+    monkeypatch.setattr("ksearch.__main__.EmbeddingGenerator", FakeEmbedder)
     monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
 
     result = runner.invoke(app, ["health"])
@@ -56,7 +56,7 @@ def test_search_command_accepts_kbase_dir_for_only_cache_flow():
 
         ingest_result = runner.invoke(
             app,
-            ["ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
+            ["kbase", "ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
         )
         assert ingest_result.exit_code == 0
 
@@ -86,13 +86,13 @@ def test_query_command_searches_kbase_entries():
 
         ingest_result = runner.invoke(
             app,
-            ["ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
+            ["kbase", "ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
         )
         assert ingest_result.exit_code == 0
 
         query_result = runner.invoke(
             app,
-            ["query", "Cancellation propagation", "--kbase-dir", kbase_dir],
+            ["kbase", "query", "Cancellation propagation", "--kbase-dir", kbase_dir],
         )
 
         assert query_result.exit_code == 0
@@ -112,11 +112,12 @@ def test_kbase_reset_command_reinitializes_kbase(monkeypatch):
         def reset(self):
             FakeKB.reset_called = True
 
-    monkeypatch.setattr("kbase.__main__.KnowledgeBase", FakeKB)
+    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
 
     result = runner.invoke(
         app,
         [
+            "kbase",
             "reset",
             "--confirm",
             "--mode",
@@ -169,8 +170,8 @@ def test_stats_command_prints_unified_sections(monkeypatch):
                 "embedding_dimension": 768,
             }
 
-    monkeypatch.setattr("kbase.__main__.CacheManager", FakeCache)
-    monkeypatch.setattr("kbase.__main__.KnowledgeBase", FakeKB)
+    monkeypatch.setattr("ksearch.__main__.CacheManager", FakeCache)
+    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
 
     result = runner.invoke(app, ["stats"])
 

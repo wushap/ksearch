@@ -4,7 +4,7 @@ import os
 import tempfile
 import pytest
 
-from kbase.kbase import KnowledgeBase, KnowledgeBaseEntry, KnowledgeBaseSearchResult
+from ksearch.kbase import KnowledgeBase, KnowledgeBaseEntry, KnowledgeBaseSearchResult
 
 
 class TestKnowledgeBaseEntry:
@@ -128,7 +128,7 @@ class TestKnowledgeBaseChroma:
         os.unlink(filepath)
 
     def test_clear(self, temp_kbase):
-        """Test clearing kbase."""
+        """Test clearing ksearch."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Clear Test\n\nContent.")
             f.flush()

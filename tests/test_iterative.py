@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 import time
 
-from kbase.iterative import (
+from ksearch.iterative import (
     ConvergenceEvaluator,
     ConvergenceResult,
     IterationBoundary,
@@ -12,8 +12,8 @@ from kbase.iterative import (
     SufficiencyEvaluator,
     IterativeSearchEngine,
 )
-from kbase.kbase import KnowledgeBaseSearchResult
-from kbase.models import ResultEntry
+from ksearch.kbase import KnowledgeBaseSearchResult
+from ksearch.models import ResultEntry
 
 
 class TestConvergenceEvaluator:
@@ -678,7 +678,7 @@ class TestIterativeSearchEngine:
             url="https://example.com",
             title="Web Title",
             content="Web content",
-            file_path="/different/path",  # Different from kbase
+            file_path="/different/path",  # Different from ksearch
             cached=True,
             source="web",
             cached_date="2024-01-01",

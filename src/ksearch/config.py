@@ -1,4 +1,4 @@
-"""Configuration management for kbase package."""
+"""Configuration management for ksearch package."""
 
 import copy
 import json
@@ -7,8 +7,8 @@ import os
 
 DEFAULT_CONFIG = {
     "searxng_url": "http://localhost:48888",
-    "store_dir": "~/.kbase/store",
-    "index_db": "~/.kbase/index.db",
+    "store_dir": "~/.ksearch/store",
+    "index_db": "~/.ksearch/index.db",
     "max_results": 10,
     "timeout": 30,
     "format": "markdown",
@@ -19,7 +19,7 @@ DEFAULT_CONFIG = {
     "verbose": False,
     # Knowledge base settings
     "kbase_mode": "",  # "chroma", "qdrant", or "" (disabled)
-    "kbase_dir": "~/.kbase/kbase",
+    "kbase_dir": "~/.ksearch/kbase",
     "kbase_top_k": 5,
     "qdrant_url": "http://localhost:6333",
     # Embedding settings
@@ -57,7 +57,7 @@ def init_default_config(config_path: str) -> None:
         json.dump(DEFAULT_CONFIG, f, indent=2)
 
 
-def load_config(config_path: str = "~/.kbase/config.json") -> dict:
+def load_config(config_path: str = "~/.ksearch/config.json") -> dict:
     """Load config from file, return defaults if file doesn't exist."""
     config_path = expand_path(config_path)
 

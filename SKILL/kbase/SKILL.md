@@ -24,12 +24,12 @@ Use this skill when the user asks to:
 
 Pick the command by intent:
 
-- 普通搜索：`uv run kbase search "<query>"`
-- 只查网页缓存：`uv run kbase search "<query>" --only-cache`
-- 强制联网：`uv run kbase search "<query>" --no-cache`
-- 语义知识库检索：`uv run kbase query "<query>" --mode chroma`
-- kbase-first 迭代搜索：`uv run kbase search "<query>" --kbase chroma --iterative`
-- 导入本地文档到 kbase：`uv run kbase ingest <path> --kbase-dir <dir> --source <label>`
+- 普通搜索：`uv run ksearch search "<query>"`
+- 只查网页缓存：`uv run ksearch search "<query>" --only-cache`
+- 强制联网：`uv run ksearch search "<query>" --no-cache`
+- 语义知识库检索：`uv run ksearch kbase query "<query>" --mode chroma`
+- kbase-first 迭代搜索：`uv run ksearch search "<query>" --kbase chroma --iterative`
+- 导入本地文档到 kbase：`uv run ksearch kbase ingest <path> --kbase-dir <dir> --source <label>`
 
 ## Default Workflow
 
@@ -44,22 +44,22 @@ When the user asks to "search X", use this order:
 
 ```bash
 # Standard search
-uv run kbase search "python asyncio"
+uv run ksearch search "python asyncio"
 
 # Cache only
-uv run kbase search "python asyncio" --only-cache
+uv run ksearch search "python asyncio" --only-cache
 
 # Force web search
-uv run kbase search "python asyncio tutorial" --no-cache --max-results 5
+uv run ksearch search "python asyncio tutorial" --no-cache --max-results 5
 
 # kbase semantic search
-uv run kbase query "asyncio cancellation" --mode chroma --kbase-dir ~/.kbase/kbase
+uv run ksearch kbase query "asyncio cancellation" --mode chroma --kbase-dir ~/.ksearch/kbase
 
 # Iterative kbase-first search
-uv run kbase search "asyncio cancellation" --kbase chroma --kbase-dir ~/.kbase/kbase --iterative
+uv run ksearch search "asyncio cancellation" --kbase chroma --kbase-dir ~/.ksearch/kbase --iterative
 
 # Ingest local docs into kbase
-uv run kbase ingest ~/notes --kbase-dir ~/.kbase/kbase --source logseq
+uv run ksearch kbase ingest ~/notes --kbase-dir ~/.ksearch/kbase --source logseq
 ```
 
 ## Important Options
@@ -68,7 +68,7 @@ uv run kbase ingest ~/notes --kbase-dir ~/.kbase/kbase --source logseq
 - `--time-range week|month|year`: restrict web search time window
 - `--max-results N`: limit web results
 - `--timeout N`: network/conversion timeout
-- `--kbase chroma|qdrant|none`: enable kbase search mode
+- `--kbase chroma|qdrant|none`: enable ksearch search mode
 - `--kbase-dir <dir>`: choose the kbase storage directory explicitly
 - `--qdrant-url <url>`: choose the Qdrant server when using qdrant mode
 - `--iterative`: use kbase-first sufficiency-driven search
@@ -90,7 +90,7 @@ Interpretation rules:
 ## kbase Notes
 
 - `search --kbase ...` mixes kbase recall into the normal search flow
-- `kbase search ...` is kbase-only semantic retrieval
+- `ksearch search ...` is kbase-only semantic retrieval
 - `search --only-cache --kbase ... --kbase-dir ...` should be used when the user wants local-only results including kbase content
 - `--kbase-dir` matters; if omitted, commands may read or write a different kbase than expected
 
@@ -112,9 +112,9 @@ Behavior:
 
 ## Troubleshooting
 
-- If `search --no-cache` returns no results, check `uv run kbase health`
+- If `search --no-cache` returns no results, check `uv run ksearch health`
 - If kbase results are unexpectedly empty, verify `--kbase-dir`
-- If iterative search is noisy, inspect the cached Markdown files under `~/.kbase/store/`
+- If iterative search is noisy, inspect the cached Markdown files under `~/.ksearch/store/`
 - If the user wants raw file inspection, rerun with `--format path`
 
 ## Good Defaults
@@ -122,11 +122,11 @@ Behavior:
 For most interactive use:
 
 ```bash
-uv run kbase search "<query>" --max-results 5 --timeout 15
+uv run ksearch search "<query>" --max-results 5 --timeout 15
 ```
 
 For kbase-assisted research:
 
 ```bash
-uv run kbase search "<query>" --kbase chroma --kbase-dir ~/.kbase/kbase --iterative --max-results 3 --timeout 15
+uv run ksearch search "<query>" --kbase chroma --kbase-dir ~/.ksearch/kbase --iterative --max-results 3 --timeout 15
 ```

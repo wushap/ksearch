@@ -7,11 +7,11 @@ enforcement during iterative knowledge base search cycles.
 from dataclasses import dataclass
 from typing import Optional
 
-from kbase.cache import CacheManager
-from kbase.converter import ContentConverter
-from kbase.kbase import KnowledgeBase, KnowledgeBaseSearchResult
-from kbase.models import ResultEntry
-from kbase.searxng import SearXNGClient
+from ksearch.cache import CacheManager
+from ksearch.converter import ContentConverter
+from ksearch.kbase import KnowledgeBase, KnowledgeBaseSearchResult
+from ksearch.models import ResultEntry
+from ksearch.searxng import SearXNGClient
 
 
 @dataclass

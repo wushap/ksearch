@@ -1,10 +1,10 @@
-"""Tests for kbase.searxng module."""
+"""Tests for ksearch.searxng module."""
 
 import pytest
 from unittest.mock import Mock, patch
 
-from kbase.searxng import SearXNGClient
-from kbase.models import SearchResult
+from ksearch.searxng import SearXNGClient
+from ksearch.models import SearchResult
 
 
 def test_searxng_client_init():

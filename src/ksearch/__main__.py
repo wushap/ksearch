@@ -1,25 +1,30 @@
-"""CLI entry point for kbase."""
+"""CLI entry point for ksearch."""
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from kbase.config import load_config, merge_config, DEFAULT_CONFIG, expand_path
-from kbase.cache import CacheManager
-from kbase.searxng import SearXNGClient
-from kbase.converter import ContentConverter
-from kbase.embeddings import EmbeddingGenerator
-from kbase.search import SearchEngine
-from kbase.output import format_markdown, format_paths
-from kbase.kbase import KnowledgeBase
-from kbase.models import ResultEntry
+from ksearch.config import load_config, merge_config, DEFAULT_CONFIG, expand_path
+from ksearch.cache import CacheManager
+from ksearch.searxng import SearXNGClient
+from ksearch.converter import ContentConverter
+from ksearch.embeddings import EmbeddingGenerator
+from ksearch.search import SearchEngine
+from ksearch.output import format_markdown, format_paths
+from ksearch.kbase import KnowledgeBase
+from ksearch.models import ResultEntry
 
 
 app = typer.Typer(
-    name="kbase",
+    name="ksearch",
     help="Personal knowledge base with web search - CLI tool",
 )
+kbase_app = typer.Typer(
+    name="kbase",
+    help="kbase operations",
+)
+app.add_typer(kbase_app, name="kbase")
 
 console = Console()
 
@@ -39,7 +44,7 @@ def build_kbase(config: dict) -> KnowledgeBase:
     kbase_mode = config.get("kbase_mode") or "chroma"
     return KnowledgeBase(
         mode=kbase_mode,
-        persist_dir=config.get("kbase_dir", "~/.kbase/kbase"),
+        persist_dir=config.get("kbase_dir", "~/.ksearch/kbase"),
         qdrant_url=config.get("qdrant_url"),
         embedding_model=config.get("embedding_model", "nomic-embed-text"),
         embedding_dimension=config.get("embedding_dimension", 768),
@@ -97,7 +102,7 @@ def search(
 ):
     """Search for keyword in cache, kbase, and/or network."""
     # Load config file
-    file_config = load_config("~/.kbase/config.json")
+    file_config = load_config("~/.ksearch/config.json")
 
     # Build CLI args dict (only non-None values)
     cli_args = {}
@@ -142,11 +147,11 @@ def search(
     engine = SearchEngine(cache, searxng, converter)
 
     if verbose:
-        console.print(Panel(f"Searching: {keyword}", title="kbase"))
+        console.print(Panel(f"Searching: {keyword}", title="ksearch"))
 
     # Iterative kbase-first search
     if config.get("iterative_enabled"):
-        from kbase.iterative import IterativeSearchEngine
+        from ksearch.iterative import IterativeSearchEngine
         kbase_mode_value = config.get("kbase_mode")
         if not kbase_mode_value or kbase_mode_value == "none":
             console.print("[red]Iterative search requires --kbase mode (chroma or qdrant)[/red]")
@@ -203,10 +208,10 @@ def search(
 
 @app.command("stats")
 def stats_cmd(
-    store_dir: str = typer.Option("~/.kbase/store", "--store-dir", "-d", help="Store directory"),
-    index_db: str = typer.Option("~/.kbase/index.db", "--index-db", help="Index database path"),
+    store_dir: str = typer.Option("~/.ksearch/store", "--store-dir", "-d", help="Store directory"),
+    index_db: str = typer.Option("~/.ksearch/index.db", "--index-db", help="Index database path"),
     kbase_mode: str = typer.Option("chroma", "--kbase-mode", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -259,14 +264,14 @@ def stats_cmd(
 
 
 # kbase data commands
-@app.command("ingest")
+@kbase_app.command("ingest")
 def kbase_ingest(
     path: str = typer.Argument(..., help="File or directory to ingest"),
     glob_pattern: str = typer.Option("*.md", "--glob", "-g", help="File pattern (for directories)"),
     source: str = typer.Option(None, "--source", "-s", help="Source label (logseq, affine, manual)"),
     recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Recursive search"),
     kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -313,13 +318,13 @@ def kbase_ingest(
         raise typer.Exit(1)
 
 
-@app.command("query")
+@kbase_app.command("query")
 def kbase_query(
     query: str = typer.Argument(..., help="Search query"),
     top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results"),
     source: str = typer.Option(None, "--source", "-s", help="Filter by source"),
     kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -377,10 +382,10 @@ def kbase_query(
         raise typer.Exit(1)
 
 
-@app.command("list")
+@kbase_app.command("list")
 def kbase_list(
     kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -411,10 +416,10 @@ def kbase_list(
     console.print(table)
 
 
-@app.command("clear")
+@kbase_app.command("clear")
 def kbase_clear(
     kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -439,11 +444,11 @@ def kbase_clear(
     console.print("[green]✓[/green] kbase cleared")
 
 
-@app.command("delete")
+@kbase_app.command("delete")
 def kbase_delete(
     file_path: str = typer.Argument(..., help="File path to delete"),
     kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -463,10 +468,10 @@ def kbase_delete(
     console.print(f"[green]✓[/green] Deleted entries from {file_path}")
 
 
-@app.command("reset")
+@kbase_app.command("reset")
 def kbase_reset(
     kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
-    kbase_dir: str = typer.Option("~/.kbase/kbase", "--kbase-dir", help="kbase directory"),
+    kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
     qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
     embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
     embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
@@ -503,10 +508,10 @@ def config_cmd(
     ollama_url: str = typer.Option(None, "--ollama-url", help="Set Ollama URL"),
 ):
     """Manage configuration."""
-    config_path = expand_path("~/.kbase/config.json")
+    config_path = expand_path("~/.ksearch/config.json")
 
     if init:
-        from kbase.config import init_default_config
+        from ksearch.config import init_default_config
         init_default_config(config_path)
         console.print(f"[green]✓[/green] Config initialized at {config_path}")
         return

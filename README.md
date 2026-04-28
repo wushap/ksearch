@@ -2,7 +2,7 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-`kbase` is a research-oriented CLI that combines local cache, semantic knowledge-base retrieval, and live web search in one workflow.
+`ksearch` is a research-oriented CLI that combines local cache, semantic knowledge-base retrieval, and live web search in one workflow.
 
 Instead of treating search as a stateless query, `kbase` turns each run into reusable local knowledge:
 
@@ -47,7 +47,7 @@ kbase metadata stores embedding model and dimension. If you switch embedding set
 
 ### Unified Statistics
 
-`kbase stats` shows:
+`ksearch stats` shows:
 
 - cache entry count
 - kbase entry count
@@ -84,23 +84,23 @@ uv pip install -e ".[all]"
 Basic search:
 
 ```bash
-kbase search "python asyncio"
+ksearch search "python asyncio"
 ```
 
 Common variants:
 
 ```bash
-kbase search "rust async" --only-cache
-kbase search "agent memory" --no-cache
-kbase search "latest ai trends" --time-range week --max-results 5
-kbase search "python asyncio" --format path
-kbase search "vector database" --verbose
+ksearch search "rust async" --only-cache
+ksearch search "agent memory" --no-cache
+ksearch search "latest ai trends" --time-range week --max-results 5
+ksearch search "python asyncio" --format path
+ksearch search "vector database" --verbose
 ```
 
 Unified statistics:
 
 ```bash
-kbase stats
+ksearch stats
 ```
 
 ## Common Workflows
@@ -108,7 +108,7 @@ kbase stats
 ### 1. Cache-first Search
 
 ```bash
-kbase search "python asyncio"
+ksearch search "python asyncio"
 ```
 
 Use this for normal interactive search with local reuse.
@@ -116,7 +116,7 @@ Use this for normal interactive search with local reuse.
 ### 2. kbase-assisted Search
 
 ```bash
-kbase search "task cancellation" --kbase chroma
+ksearch search "task cancellation" --kbase chroma
 ```
 
 Use this when you already have local notes or previously ingested material.
@@ -132,7 +132,7 @@ Use this when you want semantic retrieval without new web fetching.
 ### 4. Iterative kbase-first Search
 
 ```bash
-kbase search "how does asyncio cancellation propagate" --kbase chroma --iterative
+ksearch search "how does asyncio cancellation propagate" --kbase chroma --iterative
 ```
 
 Use this when local knowledge may be incomplete and you want controlled web expansion plus kbase ingestion.
@@ -177,7 +177,7 @@ Embedding settings used by the kbase must stay consistent with stored vectors.
 Example:
 
 ```bash
-kbase config --embedding-model mxbai-embed-large --embedding-dimension 1024
+ksearch config --embedding-model mxbai-embed-large --embedding-dimension 1024
 kbase reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
 kbase ingest ~/notes --source logseq
 ```
@@ -201,7 +201,7 @@ Default endpoints:
 Default config path:
 
 ```text
-~/.kbase/config.json
+~/.ksearch/config.json
 ```
 
 Example:
@@ -209,8 +209,8 @@ Example:
 ```json
 {
   "searxng_url": "http://localhost:48888",
-  "store_dir": "~/.kbase/store",
-  "index_db": "~/.kbase/index.db",
+  "store_dir": "~/.ksearch/store",
+  "index_db": "~/.ksearch/index.db",
   "max_results": 10,
   "timeout": 30,
   "format": "markdown",
@@ -219,7 +219,7 @@ Example:
   "only_cache": false,
   "verbose": false,
   "kbase_mode": "",
-  "kbase_dir": "~/.kbase/kbase",
+  "kbase_dir": "~/.ksearch/kbase",
   "kbase_top_k": 5,
   "qdrant_url": "http://localhost:6333",
   "embedding_model": "nomic-embed-text",

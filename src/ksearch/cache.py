@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from kbase.models import CacheEntry
+from ksearch.models import CacheEntry
 
 
 TIME_RANGE_SQL = {

@@ -1,11 +1,11 @@
-"""Tests for kbase.config module."""
+"""Tests for ksearch.config module."""
 
 import json
 import tempfile
 import os
 from pathlib import Path
 
-from kbase.config import (
+from ksearch.config import (
     DEFAULT_CONFIG,
     load_config,
     merge_config,
@@ -18,9 +18,9 @@ def test_default_config_structure():
     assert "store_dir" in DEFAULT_CONFIG
     assert DEFAULT_CONFIG["max_results"] == 10
     assert DEFAULT_CONFIG["format"] == "markdown"
-    assert DEFAULT_CONFIG["store_dir"] == "~/.kbase/store"
-    assert DEFAULT_CONFIG["index_db"] == "~/.kbase/index.db"
-    assert DEFAULT_CONFIG["kbase_dir"] == "~/.kbase/kbase"
+    assert DEFAULT_CONFIG["store_dir"] == "~/.ksearch/store"
+    assert DEFAULT_CONFIG["index_db"] == "~/.ksearch/index.db"
+    assert DEFAULT_CONFIG["kbase_dir"] == "~/.ksearch/kbase"
     assert DEFAULT_CONFIG["iterative_enabled"] is False
     assert DEFAULT_CONFIG["embedding_dimension"] == 768
     assert DEFAULT_CONFIG["max_iterations"] == 5

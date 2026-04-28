@@ -90,7 +90,7 @@ EOF
 cd "$PROJECT_DIR"
 
 RESET_OUTPUT="$(run_and_capture "reset temporary kbase" \
-  uv run kbase reset --confirm \
+  uv run ksearch kbase reset --confirm \
   --mode chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
@@ -99,7 +99,7 @@ RESET_OUTPUT="$(run_and_capture "reset temporary kbase" \
 assert_contains "$RESET_OUTPUT" "Knowledge base reset" "kbase reset should succeed"
 
 INGEST_OUTPUT="$(run_and_capture "ingest multilingual fixture notes" \
-  uv run kbase ingest "$NOTES_DIR" \
+  uv run ksearch kbase ingest "$NOTES_DIR" \
   --mode chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
@@ -108,38 +108,38 @@ INGEST_OUTPUT="$(run_and_capture "ingest multilingual fixture notes" \
   --source e2e)"
 assert_contains "$INGEST_OUTPUT" "Ingested 3 chunks" "kbase ingest should ingest all fixture notes"
 
-KB_SEARCH_EN="$(run_and_capture "kbase search english keyword" \
-  uv run kbase query "asyncio cancellation propagation" \
+KB_SEARCH_EN="$(run_and_capture "ksearch search english keyword" \
+  uv run ksearch kbase query "asyncio cancellation propagation" \
   --mode chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --top-k 3)"
-assert_contains "$KB_SEARCH_EN" "Python Asyncio Cancellation" "english kbase search should hit english fixture"
+assert_contains "$KB_SEARCH_EN" "Python Asyncio Cancellation" "english ksearch search should hit english fixture"
 
-KB_SEARCH_ZH="$(run_and_capture "kbase search chinese keyword" \
-  uv run kbase query "异步取消传播 清理资源" \
+KB_SEARCH_ZH="$(run_and_capture "ksearch search chinese keyword" \
+  uv run ksearch kbase query "异步取消传播 清理资源" \
   --mode chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --top-k 3)"
-assert_contains "$KB_SEARCH_ZH" "Python 异步取消说明" "chinese kbase search should hit chinese fixture"
+assert_contains "$KB_SEARCH_ZH" "Python 异步取消说明" "chinese ksearch search should hit chinese fixture"
 
-KB_SEARCH_MIXED="$(run_and_capture "kbase search mixed keyword" \
-  uv run kbase query "Python 异步 cancellation cleanup" \
+KB_SEARCH_MIXED="$(run_and_capture "ksearch search mixed keyword" \
+  uv run ksearch kbase query "Python 异步 cancellation cleanup" \
   --mode chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --top-k 3)"
-assert_contains "$KB_SEARCH_MIXED" "Asyncio Cleanup Checklist" "mixed kbase search should hit mixed fixture"
+assert_contains "$KB_SEARCH_MIXED" "Asyncio Cleanup Checklist" "mixed ksearch search should hit mixed fixture"
 
 SEARCH_CACHE_EN="$(run_and_capture "search only-cache english keyword" \
-  uv run kbase search "asyncio cancellation propagation" \
+  uv run ksearch search "asyncio cancellation propagation" \
   --kbase chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
@@ -149,7 +149,7 @@ SEARCH_CACHE_EN="$(run_and_capture "search only-cache english keyword" \
 assert_contains "$SEARCH_CACHE_EN" "缓存结果 (3条)" "only-cache english search should return three kbase-backed results"
 
 SEARCH_CACHE_ZH="$(run_and_capture "search only-cache chinese keyword" \
-  uv run kbase search "异步取消传播 清理资源" \
+  uv run ksearch search "异步取消传播 清理资源" \
   --kbase chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
@@ -159,7 +159,7 @@ SEARCH_CACHE_ZH="$(run_and_capture "search only-cache chinese keyword" \
 assert_contains "$SEARCH_CACHE_ZH" "缓存结果 (3条)" "only-cache chinese search should return three kbase-backed results"
 
 ITERATIVE_EN="$(run_and_capture "iterative english search" \
-  uv run kbase search "python asyncio cancellation best practices" \
+  uv run ksearch search "python asyncio cancellation best practices" \
   --kbase chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
@@ -171,7 +171,7 @@ ITERATIVE_EN="$(run_and_capture "iterative english search" \
 assert_contains "$ITERATIVE_EN" "总计:" "iterative english search should produce formatted results"
 
 ITERATIVE_ZH="$(run_and_capture "iterative chinese search" \
-  uv run kbase search "Python 异步取消 最佳实践" \
+  uv run ksearch search "Python 异步取消 最佳实践" \
   --kbase chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
@@ -186,7 +186,7 @@ BAD_MODEL_EMBED="$(curl -sS "$OLLAMA_URL/api/embeddings" -d "{\"model\":\"$BAD_M
 assert_contains "$BAD_MODEL_EMBED" "does not support embeddings" "negative model should fail the embedding endpoint"
 
 BAD_MODEL_SEARCH="$(run_and_capture "search with non-embedding model negative case" \
-  uv run kbase search "asyncio cancellation propagation" \
+  uv run ksearch search "asyncio cancellation propagation" \
   --kbase chroma \
   --kbase-dir "$KB_DIR" \
   --embedding-model "$BAD_MODEL" \

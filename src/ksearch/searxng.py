@@ -3,7 +3,7 @@
 import requests
 from typing import Optional
 
-from kbase.models import SearchResult
+from ksearch.models import SearchResult
 
 
 class SearXNGClient:

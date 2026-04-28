@@ -2,7 +2,7 @@
 
 import pytest
 
-from kbase.embeddings import EmbeddingGenerator
+from ksearch.embeddings import EmbeddingGenerator
 
 
 class TestEmbeddingGenerator:
@@ -109,7 +109,7 @@ class TestEmbeddingGeneratorIntegration:
 class TestGetEmbedder:
     def test_get_embedder_from_config(self):
         """Test embedder factory from config."""
-        from kbase.embeddings import get_embedder
+        from ksearch.embeddings import get_embedder
 
         config = {
             "embedding_mode": "ollama",

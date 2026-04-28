@@ -1,14 +1,14 @@
-"""Tests for kbase.search module."""
+"""Tests for ksearch.search module."""
 
 import tempfile
 import os
 from unittest.mock import Mock, patch
 
-from kbase.search import SearchEngine
-from kbase.cache import CacheManager
-from kbase.searxng import SearXNGClient
-from kbase.converter import ContentConverter
-from kbase.models import SearchResult, ResultEntry
+from ksearch.search import SearchEngine
+from ksearch.cache import CacheManager
+from ksearch.searxng import SearXNGClient
+from ksearch.converter import ContentConverter
+from ksearch.models import SearchResult, ResultEntry
 
 
 def test_search_engine_exact_match_no_network():
