@@ -1,23 +1,76 @@
 # ksearch
 
-结合本地缓存、知识库检索和网络搜索的 Python CLI 工具。
+English | [简体中文](./README.zh-CN.md)
 
-## 特性
+`ksearch` is a research-oriented CLI that combines local cache, semantic knowledge-base retrieval, and live web search in one workflow.
 
-- 缓存优先的网页搜索，避免重复抓取和转换
-- 基于 Chroma 或 Qdrant 的知识库语义检索
-- 可选的迭代式 KB-first 搜索：先查 KB，不足时再受限扩展网页并回灌 KB
-- 自动将网页内容转换为 Markdown 并写入本地缓存
-- 支持 Markdown 输出和纯路径输出
-- JSON 配置文件 + CLI 参数覆盖
+Instead of treating search as a stateless query, `ksearch` turns each run into reusable local knowledge:
 
-## 安装
+- cache-first web search to avoid repeated fetching and conversion
+- KB semantic retrieval on top of Chroma or Qdrant
+- iterative KB-first search that expands to the web only when local knowledge is insufficient
+- automatic web-to-Markdown conversion for reuse and later ingestion
+- safer embedding model switching with KB metadata validation
+- unified cache + KB statistics for observability
+
+## Why ksearch
+
+Most CLI search tools stop at "return search results".  
+`ksearch` is built for an incremental knowledge loop:
+
+1. search local cache and semantic KB first
+2. fetch the web only when needed
+3. clean and convert pages into Markdown
+4. persist them locally
+5. reuse them in future searches
+
+This makes it useful for:
+
+- personal research workflows
+- local AI / agent memory pipelines
+- note-backed search across mixed local and web knowledge
+- repeatable technical investigation with growing retrieval quality
+
+## Highlights
+
+### KB-first Retrieval, Not Just Web Search
+
+Use plain cached search, semantic KB retrieval, or iterative KB-first expansion depending on the task.
+
+### Better Content Extraction
+
+`ksearch` now prefers `trafilatura` for main-body extraction and falls back to `markitdown`, which improves article cleanliness and reduces boilerplate noise.
+
+### Safer Embedding Changes
+
+KB metadata stores embedding model and dimension. If you switch embedding settings, `ksearch` will block mismatched KB reuse and require an explicit reset.
+
+### Unified Statistics
+
+`ksearch stats` shows:
+
+- cache entry count
+- KB entry count
+- total size
+- keyword variety
+- website/domain distribution
+- search engine distribution
+- KB source distribution
+- embedding configuration
+
+### Live E2E Validation
+
+The repo includes a real Ollama + SearXNG end-to-end script for multilingual search validation.
+
+## Installation
+
+Base install:
 
 ```bash
 uv sync
 ```
 
-可选依赖：
+Optional extras:
 
 ```bash
 uv pip install -e ".[qdrant]"
@@ -26,15 +79,15 @@ uv pip install -e ".[crawl4ai]"
 uv pip install -e ".[all]"
 ```
 
-## 基本使用
+## Quick Start
 
-标准搜索命令使用 `search` 子命令：
+Basic search:
 
 ```bash
 ksearch search "python asyncio"
 ```
 
-常见选项：
+Common variants:
 
 ```bash
 ksearch search "rust async" --only-cache
@@ -44,62 +97,84 @@ ksearch search "python asyncio" --format path
 ksearch search "vector database" --verbose
 ```
 
-查看统一统计：
+Unified statistics:
 
 ```bash
 ksearch stats
 ```
 
-## 知识库搜索
+## Common Workflows
 
-启用 KB 检索：
+### 1. Cache-first Search
+
+```bash
+ksearch search "python asyncio"
+```
+
+Use this for normal interactive search with local reuse.
+
+### 2. KB-assisted Search
 
 ```bash
 ksearch search "task cancellation" --kb chroma
 ```
 
-只做知识库操作时使用 `kb` 子命令：
+Use this when you already have local notes or previously ingested material.
+
+### 3. KB-only Semantic Retrieval
+
+```bash
+ksearch kb search "asyncio cancellation" --top-k 5
+```
+
+Use this when you want semantic retrieval without new web fetching.
+
+### 4. Iterative KB-first Search
+
+```bash
+ksearch search "how does asyncio cancellation propagate" --kb chroma --iterative
+```
+
+Use this when local knowledge may be incomplete and you want controlled web expansion plus KB ingestion.
+
+## Knowledge Base Commands
 
 ```bash
 ksearch kb ingest ~/notes --source logseq --verbose
 ksearch kb ingest ~/docs/readme.md --source manual
-ksearch kb search "异步编程最佳实践" --top-k 5
+ksearch kb search "async programming best practices" --top-k 5
 ksearch kb list
 ksearch kb delete ~/old-notes/test.md
 ksearch kb clear --confirm
 ksearch kb reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
 ```
 
-## 迭代式 KB-first 搜索
+## Iterative Search
 
-当你希望优先利用本地知识库，不足时再自动扩展网页结果并回灌 KB，可使用：
+Iterative mode is a sufficiency-driven orchestration layer:
 
-```bash
-ksearch search "how does asyncio cancellation propagate" --kb chroma --iterative
-```
+1. classify the query style
+2. search the KB first
+3. score result sufficiency
+4. fetch the web only if needed
+5. convert pages to Markdown
+6. save to cache and ingest into the KB
+7. stop when sufficiency or hard limits are reached
 
-迭代模式行为：
+Notes:
 
-1. 判断查询更偏向事实型还是探索型
-2. 先做 KB 搜索并计算充分性分数
-3. 若结果不足，则抓取新的网页结果
-4. 将网页内容转换为 Markdown、写入缓存，并直接摄入 KB
-5. 达到充分性、收敛条件或边界条件后停止
+- `--iterative` requires `--kb chroma` or `--kb qdrant`
+- iterative mode keeps new web material in local cache for later reuse
 
-限制与要求：
+## Embedding Safety
 
-- `--iterative` 需要同时启用 `--kb chroma` 或 `--kb qdrant`
-- 迭代模式会保留网页结果缓存，因此后续搜索可复用这些内容
+Embedding settings used by the KB must stay consistent with stored vectors.
 
-## Embedding 模型切换
+- changing `embedding_model` or `embedding_dimension` invalidates old KB vectors
+- KB metadata is persisted and checked on open
+- mismatched configuration requires an explicit reset
 
-知识库向量的 `embedding_model` 和 `embedding_dimension` 必须和入库时保持一致。
-
-- 修改 embedding 模型或维度后，旧 KB 不能继续混用
-- `ksearch` 现在会为 KB 写入元数据，并在模型或维度不匹配时报错
-- 发生切换时，先执行显式重置，再重新摄入文档
-
-示例：
+Example:
 
 ```bash
 ksearch config --embedding-model mxbai-embed-large --embedding-dimension 1024
@@ -107,25 +182,29 @@ ksearch kb reset --confirm --embedding-model mxbai-embed-large --embedding-dimen
 ksearch kb ingest ~/notes --source logseq
 ```
 
-## Docker 部署
+## Docker Services
 
 ```bash
 docker compose up -d
 docker exec ksearch-ollama ollama pull nomic-embed-text
 ```
 
-默认服务：
+Default endpoints:
 
 - Qdrant: `http://localhost:6333`
 - SearXNG: `http://localhost:48888`
 - Ollama: `http://localhost:11434`
-- Open WebUI: `http://localhost:3000`（启用对应 profile 时）
+- Open WebUI: `http://localhost:3000` (when the profile is enabled)
 
-## 配置
+## Configuration
 
-默认配置文件路径：`~/.ksearch/config.json`
+Default config path:
 
-示例：
+```text
+~/.ksearch/config.json
+```
+
+Example:
 
 ```json
 {
@@ -159,58 +238,48 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
 }
 ```
 
-优先级：
+Priority order:
 
 ```text
-CLI 参数 > 配置文件 > 默认值
+CLI args > config file > defaults
 ```
 
-## 关键参数
+## Important CLI Options
 
-搜索命令常用参数：
-
-- `--format`, `-f`: `markdown` 或 `path`
+- `--format`, `-f`: `markdown` or `path`
 - `--time-range`, `-t`: `day` / `week` / `month` / `year`
-- `--max-results`, `-m`: 限制网页搜索结果数量
-- `--searxng-url`, `-s`: 指定 SearXNG 服务地址
-- `--store-dir`, `-d`: 指定缓存目录
-- `--index-db`: 指定 SQLite 索引路径
-- `--timeout`: 请求超时秒数
-- `--no-cache`: 忽略网页缓存，强制抓取网络结果
-- `--only-cache`: 只返回网页缓存
-- `--kb`: 启用 KB 搜索，值为 `chroma`、`qdrant` 或 `none`
-- `--embedding-model`: 指定 KB 使用的 embedding 模型
-- `--embedding-dimension`: 指定 KB 使用的 embedding 维度
-- `--iterative`: 启用迭代式 KB-first 搜索
-- `--verbose`, `-v`: 打印详细信息
+- `--max-results`, `-m`: limit web results
+- `--searxng-url`, `-s`: set SearXNG endpoint
+- `--store-dir`, `-d`: set cache directory
+- `--index-db`: set SQLite index path
+- `--timeout`: request timeout in seconds
+- `--no-cache`: skip cache and force network
+- `--only-cache`: return cached results only
+- `--kb`: enable KB retrieval via `chroma`, `qdrant`, or `none`
+- `--embedding-model`: choose KB embedding model
+- `--embedding-dimension`: choose KB embedding dimension
+- `--iterative`: enable iterative KB-first search
+- `--verbose`, `-v`: print detailed execution info
 
-统计命令会统一展示：
+## Testing
 
-- 当前缓存条数
-- KB 条数与源文件数
-- 总大小
-- 关键词种类数
-- 网站来源分布
-- 搜索引擎分布
-- KB source 分布与 embedding 配置
-
-## 验证
+Unit and integration-style tests:
 
 ```bash
 uv run pytest -q
 ```
 
-真实环境端到端测试：
+Live Ollama + SearXNG E2E:
 
 ```bash
 bash tests/ollama_e2e_integration.sh
 ```
 
-这个脚本要求本机可访问：
+This script expects:
 
-- Ollama: `http://localhost:11434`
-- SearXNG: `http://localhost:48888`
-- Ollama 中存在 `nomic-embed-text:latest`
-- 负例模型默认使用 `fredrezones55/qwen3.5-opus:9b`
+- Ollama at `http://localhost:11434`
+- SearXNG at `http://localhost:48888`
+- `nomic-embed-text:latest` available in Ollama
+- a negative-case non-embedding model, currently `fredrezones55/qwen3.5-opus:9b`
 
-脚本会创建临时 KB 和临时测试文档，覆盖中英文和混合关键词检索、`--only-cache`、`--iterative`，并生成一份 markdown 报告。
+It creates a temporary KB and fixture notes, runs English, Chinese, and mixed-keyword flows, validates `--only-cache` and `--iterative`, and writes a Markdown report.
