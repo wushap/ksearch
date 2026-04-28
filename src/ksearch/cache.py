@@ -21,6 +21,20 @@ TIME_RANGE_SQL = {
 VALID_TIME_RANGES = {"day", "week", "month", "year"}
 
 
+def normalize_engine_names(engine_value: str) -> list[str]:
+    """Normalize raw engine strings for statistics aggregation."""
+    if not engine_value or not engine_value.strip():
+        return ["unknown"]
+
+    normalized = []
+    for part in engine_value.split(","):
+        name = part.strip().lower()
+        if name:
+            normalized.append(name)
+
+    return normalized or ["unknown"]
+
+
 def hash_url(url: str) -> str:
     """Generate SHA256 hash for URL."""
     return hashlib.sha256(url.encode()).hexdigest()
@@ -327,8 +341,8 @@ class CacheManager:
                 total_entries += 1
                 keywords.add(row["keyword"])
 
-                engine = row["engine"] or "unknown"
-                engines[engine] = engines.get(engine, 0) + 1
+                for engine in normalize_engine_names(row["engine"] or ""):
+                    engines[engine] = engines.get(engine, 0) + 1
 
                 domain = urlparse(row["url"]).netloc or "unknown"
                 domains[domain] = domains.get(domain, 0) + 1

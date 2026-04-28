@@ -168,3 +168,36 @@ def test_cache_manager_stats():
         assert stats["total_size_bytes"] > 0
         assert stats["engines"]["google"] == 2
         assert stats["domains"]["example.com"] == 2
+
+
+def test_cache_manager_stats_normalizes_engine_names():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        store_dir = os.path.join(tmpdir, "store")
+
+        manager = CacheManager(db_path, store_dir)
+
+        manager.save(
+            url="https://example.com/one",
+            content="One",
+            keyword="python",
+            metadata={"title": "One", "engine": "startpage, brave"},
+        )
+        manager.save(
+            url="https://example.com/two",
+            content="Two",
+            keyword="python",
+            metadata={"title": "Two", "engine": " StartPage ,Brave "},
+        )
+        manager.save(
+            url="https://example.com/three",
+            content="Three",
+            keyword="python",
+            metadata={"title": "Three", "engine": ""},
+        )
+
+        stats = manager.stats()
+
+        assert stats["engines"]["startpage"] == 2
+        assert stats["engines"]["brave"] == 2
+        assert stats["engines"]["unknown"] == 1
