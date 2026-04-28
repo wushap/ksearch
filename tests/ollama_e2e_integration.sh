@@ -10,7 +10,7 @@ BAD_MODEL="${BAD_MODEL:-fredrezones55/qwen3.5-opus:9b}"
 EMBED_DIMENSION="${EMBED_DIMENSION:-768}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 TMP_ROOT="$(mktemp -d)"
-KB_DIR="$TMP_ROOT/kb"
+KB_DIR="$TMP_ROOT/kbase"
 NOTES_DIR="$TMP_ROOT/notes"
 RESULTS_DIR="${RESULTS_DIR:-/tmp/ksearch-ollama-e2e-results}"
 REPORT_PATH="$RESULTS_DIR/ollama_e2e_report_${TIMESTAMP}.md"
@@ -89,79 +89,79 @@ EOF
 
 cd "$PROJECT_DIR"
 
-RESET_OUTPUT="$(run_and_capture "reset temporary KB" \
-  uv run ksearch kb reset --confirm \
+RESET_OUTPUT="$(run_and_capture "reset temporary kbase" \
+  uv run kbase reset --confirm \
   --mode chroma \
-  --kb-dir "$KB_DIR" \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL")"
-assert_contains "$RESET_OUTPUT" "Knowledge base reset" "kb reset should succeed"
+assert_contains "$RESET_OUTPUT" "Knowledge base reset" "kbase reset should succeed"
 
 INGEST_OUTPUT="$(run_and_capture "ingest multilingual fixture notes" \
-  uv run ksearch kb ingest "$NOTES_DIR" \
+  uv run kbase ingest "$NOTES_DIR" \
   --mode chroma \
-  --kb-dir "$KB_DIR" \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --source e2e)"
-assert_contains "$INGEST_OUTPUT" "Ingested 3 chunks" "kb ingest should ingest all fixture notes"
+assert_contains "$INGEST_OUTPUT" "Ingested 3 chunks" "kbase ingest should ingest all fixture notes"
 
-KB_SEARCH_EN="$(run_and_capture "kb search english keyword" \
-  uv run ksearch kb search "asyncio cancellation propagation" \
+KB_SEARCH_EN="$(run_and_capture "kbase search english keyword" \
+  uv run kbase query "asyncio cancellation propagation" \
   --mode chroma \
-  --kb-dir "$KB_DIR" \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --top-k 3)"
-assert_contains "$KB_SEARCH_EN" "Python Asyncio Cancellation" "english kb search should hit english fixture"
+assert_contains "$KB_SEARCH_EN" "Python Asyncio Cancellation" "english kbase search should hit english fixture"
 
-KB_SEARCH_ZH="$(run_and_capture "kb search chinese keyword" \
-  uv run ksearch kb search "异步取消传播 清理资源" \
+KB_SEARCH_ZH="$(run_and_capture "kbase search chinese keyword" \
+  uv run kbase query "异步取消传播 清理资源" \
   --mode chroma \
-  --kb-dir "$KB_DIR" \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --top-k 3)"
-assert_contains "$KB_SEARCH_ZH" "Python 异步取消说明" "chinese kb search should hit chinese fixture"
+assert_contains "$KB_SEARCH_ZH" "Python 异步取消说明" "chinese kbase search should hit chinese fixture"
 
-KB_SEARCH_MIXED="$(run_and_capture "kb search mixed keyword" \
-  uv run ksearch kb search "Python 异步 cancellation cleanup" \
+KB_SEARCH_MIXED="$(run_and_capture "kbase search mixed keyword" \
+  uv run kbase query "Python 异步 cancellation cleanup" \
   --mode chroma \
-  --kb-dir "$KB_DIR" \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --top-k 3)"
-assert_contains "$KB_SEARCH_MIXED" "Asyncio Cleanup Checklist" "mixed kb search should hit mixed fixture"
+assert_contains "$KB_SEARCH_MIXED" "Asyncio Cleanup Checklist" "mixed kbase search should hit mixed fixture"
 
 SEARCH_CACHE_EN="$(run_and_capture "search only-cache english keyword" \
-  uv run ksearch search "asyncio cancellation propagation" \
-  --kb chroma \
-  --kb-dir "$KB_DIR" \
+  uv run kbase search "asyncio cancellation propagation" \
+  --kbase chroma \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --only-cache)"
-assert_contains "$SEARCH_CACHE_EN" "缓存结果 (3条)" "only-cache english search should return three kb-backed results"
+assert_contains "$SEARCH_CACHE_EN" "缓存结果 (3条)" "only-cache english search should return three kbase-backed results"
 
 SEARCH_CACHE_ZH="$(run_and_capture "search only-cache chinese keyword" \
-  uv run ksearch search "异步取消传播 清理资源" \
-  --kb chroma \
-  --kb-dir "$KB_DIR" \
+  uv run kbase search "异步取消传播 清理资源" \
+  --kbase chroma \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
   --only-cache)"
-assert_contains "$SEARCH_CACHE_ZH" "缓存结果 (3条)" "only-cache chinese search should return three kb-backed results"
+assert_contains "$SEARCH_CACHE_ZH" "缓存结果 (3条)" "only-cache chinese search should return three kbase-backed results"
 
 ITERATIVE_EN="$(run_and_capture "iterative english search" \
-  uv run ksearch search "python asyncio cancellation best practices" \
-  --kb chroma \
-  --kb-dir "$KB_DIR" \
+  uv run kbase search "python asyncio cancellation best practices" \
+  --kbase chroma \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
@@ -171,9 +171,9 @@ ITERATIVE_EN="$(run_and_capture "iterative english search" \
 assert_contains "$ITERATIVE_EN" "总计:" "iterative english search should produce formatted results"
 
 ITERATIVE_ZH="$(run_and_capture "iterative chinese search" \
-  uv run ksearch search "Python 异步取消 最佳实践" \
-  --kb chroma \
-  --kb-dir "$KB_DIR" \
+  uv run kbase search "Python 异步取消 最佳实践" \
+  --kbase chroma \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
@@ -186,9 +186,9 @@ BAD_MODEL_EMBED="$(curl -sS "$OLLAMA_URL/api/embeddings" -d "{\"model\":\"$BAD_M
 assert_contains "$BAD_MODEL_EMBED" "does not support embeddings" "negative model should fail the embedding endpoint"
 
 BAD_MODEL_SEARCH="$(run_and_capture "search with non-embedding model negative case" \
-  uv run ksearch search "asyncio cancellation propagation" \
-  --kb chroma \
-  --kb-dir "$KB_DIR" \
+  uv run kbase search "asyncio cancellation propagation" \
+  --kbase chroma \
+  --kbase-dir "$KB_DIR" \
   --embedding-model "$BAD_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
@@ -203,21 +203,21 @@ cat > "$REPORT_PATH" <<EOF
 - Embedding model: $EMBED_MODEL
 - Negative model: $BAD_MODEL
 - Embedding dimension: $EMBED_DIMENSION
-- Temporary KB dir: $KB_DIR
+- Temporary kbase dir: $KB_DIR
 
-## KB Search EN
+## kbase Search EN
 
 \`\`\`
 $KB_SEARCH_EN
 \`\`\`
 
-## KB Search ZH
+## kbase Search ZH
 
 \`\`\`
 $KB_SEARCH_ZH
 \`\`\`
 
-## KB Search Mixed
+## kbase Search Mixed
 
 \`\`\`
 $KB_SEARCH_MIXED

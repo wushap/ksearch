@@ -1,4 +1,4 @@
-# KB CLI 工具设计文档
+# kbase CLI 工具设计文档
 
 > Superseded by `docs/superpowers/specs/2026-04-28-ksearch-iterative-search-design.md` for the current `ksearch` architecture.
 
@@ -6,7 +6,7 @@
 
 ## 概述
 
-`kb` 是一个结合本地知识库缓存和网络搜索的 CLI 工具。用户输入关键词后，优先从本地 SQLite 索引查找缓存内容，必要时补充网络搜索结果，所有结果通过 markitdown 转换为 Markdown 格式存储。
+`kbase` 是一个结合本地知识库缓存和网络搜索的 CLI 工具。用户输入关键词后，优先从本地 SQLite 索引查找缓存内容，必要时补充网络搜索结果，所有结果通过 markitdown 转换为 Markdown 格式存储。
 
 **核心特性**：
 - 本地缓存优先，减少重复下载
@@ -120,7 +120,7 @@ CREATE INDEX idx_cached_date ON cache(cached_date);
 - **URL**: https://example.com/article
 - **来源**: google
 - **缓存时间**: 2026-04-21 10:30:00
-- **文件路径**: ~/.kb/store/a1b2c3.md
+- **文件路径**: ~/.kbase/store/a1b2c3.md
 
 ---
 
@@ -139,7 +139,7 @@ CREATE INDEX idx_cached_date ON cache(cached_date);
 - **URL**: https://newsite.com/page
 - **来源**: duckduckgo, wikipedia
 - **转换时间**: 2026-04-21 12:00:00
-- **文件路径**: ~/.kb/store/d4e5f6.md
+- **文件路径**: ~/.kbase/store/d4e5f6.md
 
 ---
 
@@ -155,23 +155,23 @@ CREATE INDEX idx_cached_date ON cache(cached_date);
 ### 路径格式（`--format=path`）
 
 ```
-~/.kb/store/a1b2c3.md
-~/.kb/store/b2c3d4.md
-~/.kb/store/c3d4e5.md
-~/.kb/store/d4e5f6.md
+~/.kbase/store/a1b2c3.md
+~/.kbase/store/b2c3d4.md
+~/.kbase/store/c3d4e5.md
+~/.kbase/store/d4e5f6.md
 ```
 
 ---
 
 ## 4. 配置文件结构
 
-路径：`~/.kb/config.json`
+路径：`~/.kbase/config.json`
 
 ```json
 {
   "searxng_url": "http://localhost:48888",
-  "store_dir": "~/.kb/store",
-  "index_db": "~/.kb/index.db",
+  "store_dir": "~/.kbase/store",
+  "index_db": "~/.kbase/index.db",
   "max_results": 10,
   "timeout": 30,
   "format": "markdown",
@@ -185,8 +185,8 @@ CREATE INDEX idx_cached_date ON cache(cached_date);
 | 配置字段 | CLI 参数 | 说明 | 默认值 |
 |----------|----------|------|--------|
 | `searxng_url` | `--searxng-url` | SearXNG 实例地址 | `http://localhost:48888` |
-| `store_dir` | `--store-dir` | 缓存存储目录 | `~/.kb/store` |
-| `index_db` | `--index-db` | SQLite 索引路径 | `~/.kb/index.db` |
+| `store_dir` | `--store-dir` | 缓存存储目录 | `~/.kbase/store` |
+| `index_db` | `--index-db` | SQLite 索引路径 | `~/.kbase/index.db` |
 | `max_results` | `--max-results` | 最大结果数 | `10` |
 | `timeout` | `--timeout` | 网络请求超时秒数 | `30` |
 | `format` | `--format` | 输出格式 | `markdown` |
@@ -202,7 +202,7 @@ CREATE INDEX idx_cached_date ON cache(cached_date);
 ## 5. CLI 命令结构
 
 ```bash
-kb search "关键词" [选项]
+kbase search "关键词" [选项]
 ```
 
 | 参数 | 简写 | 说明 | 默认值 |
@@ -223,19 +223,19 @@ kb search "关键词" [选项]
 
 ```bash
 # 基本搜索
-kb search "Python asyncio 教程"
+kbase search "Python asyncio 教程"
 
 # 仅返回文件路径
-kb search "Rust 并发编程" -f path
+kbase search "Rust 并发编程" -f path
 
 # 搜索一周内的内容
-kb search "AI 最新进展" -t week -m 5
+kbase search "AI 最新进展" -t week -m 5
 
 # 强制重新搜索
-kb search "已有关键词" --no-cache
+kbase search "已有关键词" --no-cache
 
 # 仅查看本地缓存
-kb search "已有关键词" --only-cache
+kbase search "已有关键词" --only-cache
 ```
 
 ---
@@ -243,13 +243,13 @@ kb search "已有关键词" --only-cache
 ## 6. 项目结构与依赖
 
 ```
-kb/
+kbase/
 ├── pyproject.toml          # uv 项目配置
 ├── README.md
 ├── src/
-│   └── kb/
+│   └── kbase/
 │       ├── __init__.py     # 包入口，版本信息
-│       ├── __main__.py     # CLI 入口点 `kb` 命令
+│       ├── __main__.py     # CLI 入口点 `kbase` 命令
 │       ├── config.py       # 配置管理
 │       ├── cache.py        # SQLite 索引 + 文件存储
 │       ├── searxng.py      # SearXNG API 客户端
@@ -269,7 +269,7 @@ kb/
 
 ```toml
 [project]
-name = "kb"
+name = "kbase"
 version = "0.1.0"
 description = "Personal knowledge base with web search - CLI tool"
 requires-python = ">=3.10"
@@ -281,7 +281,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kb = "kb.__main__:main"
+kbase = "kbase.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -323,7 +323,7 @@ dev-dependencies = [
 ### config.py
 
 ```python
-def load_config(config_path: str = "~/.kb/config.json") -> dict
+def load_config(config_path: str = "~/.kbase/config.json") -> dict
 def merge_config(cli_args: dict, file_config: dict, defaults: dict) -> dict
 def init_default_config(config_path: str) -> None
 ```
@@ -425,12 +425,12 @@ class ResultEntry:
 ## 10. 首次运行初始化
 
 ```
-kb search "关键词"（首次）
+kbase search "关键词"（首次）
     │
-    ├─ ~/.kb/ 不存在 → 创建
-    ├─ ~/.kb/config.json 不存在 → 创建默认配置
-    ├─ ~/.kb/store/ 不存在 → 创建
-    ├─ ~/.kb/index.db 不存在 → 创建数据库 + 表
+    ├─ ~/.kbase/ 不存在 → 创建
+    ├─ ~/.kbase/config.json 不存在 → 创建默认配置
+    ├─ ~/.kbase/store/ 不存在 → 创建
+    ├─ ~/.kbase/index.db 不存在 → 创建数据库 + 表
     │
     ▼
 继续正常搜索流程

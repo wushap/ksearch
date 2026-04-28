@@ -1,23 +1,23 @@
 #!/bin/bash
-# ksearch 集成测试脚本
+# kbase 集成测试脚本
 # 测试多种关键词和配置组合
 
 set -e
 
 PROJECT_DIR="/home/lan/workspace/test/search/inc"
-RESULTS_DIR="/tmp/ksearch-integration-results"
+RESULTS_DIR="/tmp/kbase-integration-results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 mkdir -p "$RESULTS_DIR"
 
 echo "========================================"
-echo "ksearch 集成测试"
+echo "kbase 集成测试"
 echo "时间: $TIMESTAMP"
 echo "========================================"
 
 # 清理缓存
 cleanup() {
-    rm -rf ~/.ksearch/
+    rm -rf ~/.kbase/
 }
 
 # 测试函数
@@ -29,7 +29,7 @@ test_search() {
     local time_range="$5"
     local extra_flags="$6"
 
-    local cmd="uv run ksearch"
+    local cmd="uv run kbase"
 
     if [ -n "$max_results" ]; then
         cmd="$cmd --max-results $max_results"

@@ -1,7 +1,7 @@
-"""Tests for kb.output module."""
+"""Tests for kbase.output module."""
 
-from ksearch.output import format_markdown, format_paths
-from ksearch.models import ResultEntry
+from kbase.output import format_markdown, format_paths
+from kbase.models import ResultEntry
 
 
 def test_format_markdown_with_cached_results():
@@ -79,12 +79,12 @@ def test_format_paths_empty():
 def test_format_markdown_with_iterative_web_result_uses_network_section():
     entries = [
         ResultEntry(
-            url="/kb/path",
-            title="KB Article",
-            content="KB content",
-            file_path="/kb/path",
+            url="/kbase/path",
+            title="kbase Article",
+            content="kbase content",
+            file_path="/kbase/path",
             cached=True,
-            source="kb",
+            source="kbase",
             cached_date="2026-04-28",
         ),
         ResultEntry(

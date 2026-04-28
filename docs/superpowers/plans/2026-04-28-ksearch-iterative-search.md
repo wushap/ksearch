@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Align `ksearch` iterative KB-first search across implementation, tests, and documentation, then apply targeted search-path cleanup.
+**Goal:** Align `ksearch` iterative kbase-first search across implementation, tests, and documentation, then apply targeted search-path cleanup.
 
-**Architecture:** Keep the current split between CLI, standard search, KB, and iterative orchestration. Tighten the iterative path so it uses clear result semantics and bounded web expansion, then synchronize README and internal docs with the actual `ksearch` feature set.
+**Architecture:** Keep the current split between CLI, standard search, kbase, and iterative orchestration. Tighten the iterative path so it uses clear result semantics and bounded web expansion, then synchronize README and internal docs with the actual `ksearch` feature set.
 
 **Tech Stack:** Python 3.10+, typer, rich, requests, markitdown, sqlite3, chromadb/qdrant, pytest
 
@@ -15,7 +15,7 @@
 - [`src/ksearch/__main__.py`](/home/lan/workspace/test/search/inc/src/ksearch/__main__.py): CLI entry and execution-path selection
 - [`src/ksearch/config.py`](/home/lan/workspace/test/search/inc/src/ksearch/config.py): default config and merge behavior
 - [`src/ksearch/iterative.py`](/home/lan/workspace/test/search/inc/src/ksearch/iterative.py): iterative search orchestration and evaluators
-- [`src/ksearch/kb.py`](/home/lan/workspace/test/search/inc/src/ksearch/kb.py): KB ingestion helpers
+- [`src/ksearch/kbase.py`](/home/lan/workspace/test/search/inc/src/ksearch/kbase.py): kbase ingestion helpers
 - [`tests/test_iterative.py`](/home/lan/workspace/test/search/inc/tests/test_iterative.py): iterative engine unit coverage
 - [`README.md`](/home/lan/workspace/test/search/inc/README.md): user-facing docs
 - [`docs/superpowers/specs/2026-04-28-ksearch-iterative-search-design.md`](/home/lan/workspace/test/search/inc/docs/superpowers/specs/2026-04-28-ksearch-iterative-search-design.md): design spec
@@ -39,11 +39,11 @@ def test_merge_config_preserves_iterative_defaults():
 def test_merge_config_applies_iterative_cli_override():
     merged = merge_config(
         {"iterative_enabled": True},
-        {"kb_mode": "chroma"},
+        {"kbase_mode": "chroma"},
         DEFAULT_CONFIG,
     )
     assert merged["iterative_enabled"] is True
-    assert merged["kb_mode"] == "chroma"
+    assert merged["kbase_mode"] == "chroma"
 ```
 
 - [ ] **Step 2: Run tests to verify current coverage gap**
@@ -55,9 +55,9 @@ Expected: either missing iterative assertions or no coverage for the new keys
 
 ```python
 if config.get("iterative_enabled"):
-    kb_mode_value = config.get("kb_mode")
-    if not kb_mode_value or kb_mode_value == "none":
-        console.print("[red]Iterative search requires --kb mode (chroma or qdrant)[/red]")
+    kbase_mode_value = config.get("kbase_mode")
+    if not kbase_mode_value or kbase_mode_value == "none":
+        console.print("[red]Iterative search requires --kbase mode (chroma or qdrant)[/red]")
         raise typer.Exit(1)
 ```
 
@@ -89,25 +89,25 @@ git commit -m "feat: document and validate iterative search config"
 
 **Files:**
 - Modify: `src/ksearch/iterative.py`
-- Modify: `src/ksearch/kb.py`
+- Modify: `src/ksearch/kbase.py`
 - Test: `tests/test_iterative.py`
 
 - [ ] **Step 1: Write failing orchestration tests**
 
 ```python
 def test_iterative_engine_returns_kb_results_when_sufficient(...):
-    kb.search.return_value = [make_kb_result("a", 0.95, "content")]
-    engine = IterativeSearchEngine(kb, searxng, converter, cache, config)
+    kbase.search.return_value = [make_kb_result("a", 0.95, "content")]
+    engine = IterativeSearchEngine(kbase, searxng, converter, cache, config)
     results = engine.search("what is python")
     assert len(results) == 1
-    assert results[0].source == "kb"
+    assert results[0].source == "kbase"
 
 
 def test_iterative_engine_ingests_only_uncached_web_results(...):
     cache.exists.side_effect = [True, False]
     searxng.search.return_value = [cached_result, fresh_result]
     engine.search("explore ai agents")
-    kb.ingest_file_from_content.assert_called_once()
+    kbase.ingest_file_from_content.assert_called_once()
 ```
 
 - [ ] **Step 2: Run tests to verify expected failures or missing assertions**
@@ -122,11 +122,11 @@ class IterativeSearchEngine:
     def search(self, query: str) -> list[ResultEntry]:
         query_type = self.query_classifier.classify(query)
         threshold = self.sufficiency.get_threshold(query_type)
-        kb_results = self.kb.search(query, top_k=10)
+        kb_results = self.kbase.search(query, top_k=10)
         score = self.sufficiency.score(kb_results)
 
         if self.sufficiency.is_sufficient(score, threshold):
-            return self._convert_kb_results(kb_results)
+            return self._convert_kbase_results(kb_results)
 
         # bounded web expansion + deduplicated final combination
 ```
@@ -135,7 +135,7 @@ class IterativeSearchEngine:
 def ingest_file_from_content(self, content: str, metadata: dict = None, ... ) -> int:
     if not content:
         return 0
-    # chunk generated content and store directly into the KB backend
+    # chunk generated content and store directly into the kbase backend
 ```
 
 - [ ] **Step 4: Run iterative tests**
@@ -146,8 +146,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ksearch/iterative.py src/ksearch/kb.py tests/test_iterative.py
-git commit -m "feat: tighten iterative KB-first search flow"
+git add src/ksearch/iterative.py src/ksearch/kbase.py tests/test_iterative.py
+git commit -m "feat: tighten iterative kbase-first search flow"
 ```
 
 ### Task 3: Reduce Search-Path Ambiguity in the CLI
@@ -189,12 +189,12 @@ all_results = iterative_engine.search(keyword)
 ```python
 all_results.append(
     ResultEntry(
-        url=f"kb://{r.id}",
+        url=f"kbase://{r.id}",
         title=r.title or r.file_path,
         content=preview,
         file_path=r.file_path,
         cached=True,
-        source=f"kb:{r.source or 'local'}",
+        source=f"kbase:{r.source or 'local'}",
         cached_date=created_at,
     )
 )
@@ -222,10 +222,10 @@ git commit -m "refactor: stabilize search result semantics"
 - [ ] **Step 1: Update README examples and config**
 
 ```markdown
-### Iterative KB-first search
+### Iterative kbase-first search
 
 ```bash
-ksearch --kb chroma --iterative "how does asyncio task cancellation work"
+ksearch --kbase chroma --iterative "how does asyncio task cancellation work"
 ```
 
 ```json
@@ -239,15 +239,15 @@ ksearch --kb chroma --iterative "how does asyncio task cancellation work"
 
 - [ ] **Step 2: Review docs for project-name drift and obsolete assumptions**
 
-Run: `rg -n "kb-cli|\\bkb\\b" README.md docs/superpowers/specs docs/superpowers/plans`
+Run: `rg -n "kbase-cli|\\bkb\\b" README.md docs/superpowers/specs docs/superpowers/plans`
 Expected: only intentional references remain
 
 - [ ] **Step 3: Save the final synced docs**
 
 ```markdown
 - `ksearch` is the project/package/CLI name
-- `kb` remains the subcommand namespace for knowledge-base operations
-- iterative mode requires KB mode
+- `kbase` remains the subcommand namespace for knowledge-base operations
+- iterative mode requires kbase mode
 ```
 
 - [ ] **Step 4: Commit**
@@ -283,6 +283,6 @@ Expected: only intended documentation/code/test changes remain
 - [ ] **Step 4: Commit**
 
 ```bash
-git add README.md src/ksearch/__main__.py src/ksearch/config.py src/ksearch/iterative.py src/ksearch/kb.py tests/test_config.py tests/test_output.py tests/test_iterative.py tests/test_search.py
+git add README.md src/ksearch/__main__.py src/ksearch/config.py src/ksearch/iterative.py src/ksearch/kbase.py tests/test_config.py tests/test_output.py tests/test_iterative.py tests/test_search.py
 git commit -m "feat: complete iterative search documentation and cleanup"
 ```

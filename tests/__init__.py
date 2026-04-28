@@ -1,1 +1,1 @@
-"""Tests for kb package."""
+"""Tests for kbase package."""

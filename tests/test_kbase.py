@@ -4,13 +4,13 @@ import os
 import tempfile
 import pytest
 
-from ksearch.kb import KnowledgeBase, KBEntry, KBSearchResult
+from kbase.kbase import KnowledgeBase, KnowledgeBaseEntry, KnowledgeBaseSearchResult
 
 
-class TestKBEntry:
-    def test_kb_entry_creation(self):
-        """Test KBEntry dataclass creation."""
-        entry = KBEntry(
+class TestKnowledgeBaseEntry:
+    def test_kbase_entry_creation(self):
+        """Test KnowledgeBaseEntry dataclass creation."""
+        entry = KnowledgeBaseEntry(
             id="test123",
             content="Test content",
             file_path="/tmp/test.md",
@@ -21,9 +21,9 @@ class TestKBEntry:
         assert entry.tags == []
         assert entry.metadata == {}
 
-    def test_kb_entry_with_metadata(self):
-        """Test KBEntry with custom metadata."""
-        entry = KBEntry(
+    def test_kbase_entry_with_metadata(self):
+        """Test KnowledgeBaseEntry with custom metadata."""
+        entry = KnowledgeBaseEntry(
             id="test456",
             content="Test content",
             file_path="/tmp/test.md",
@@ -42,65 +42,65 @@ class TestKnowledgeBaseChroma:
     """Test KnowledgeBase with Chroma embedded mode."""
 
     @pytest.fixture
-    def temp_kb(self):
-        """Create temporary KB for testing."""
+    def temp_kbase(self):
+        """Create temporary kbase for testing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            kb = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
-            yield kb
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            yield kbase
 
-    def test_init_chroma(self, temp_kb):
+    def test_init_chroma(self, temp_kbase):
         """Test Chroma initialization."""
-        assert temp_kb.mode == "chroma"
-        assert temp_kb.count() == 0
+        assert temp_kbase.mode == "chroma"
+        assert temp_kbase.count() == 0
 
-    def test_ingest_file(self, temp_kb):
+    def test_ingest_file(self, temp_kbase):
         """Test single file ingestion."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Test Document\n\nThis is test content for the knowledge base.")
             f.flush()
             filepath = f.name
 
-        chunks = temp_kb.ingest_file(filepath)
+        chunks = temp_kbase.ingest_file(filepath)
         assert chunks > 0
-        assert temp_kb.count() == chunks
+        assert temp_kbase.count() == chunks
 
         os.unlink(filepath)
 
-    def test_search(self, temp_kb):
+    def test_search(self, temp_kbase):
         """Test semantic search."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Python Programming\n\nPython is a programming language.")
             f.flush()
             filepath = f.name
 
-        temp_kb.ingest_file(filepath)
+        temp_kbase.ingest_file(filepath)
 
-        results = temp_kb.search("programming language", top_k=5)
+        results = temp_kbase.search("programming language", top_k=5)
         assert len(results) > 0
         assert results[0].content is not None
 
         os.unlink(filepath)
 
-    def test_search_with_filter(self, temp_kb):
+    def test_search_with_filter(self, temp_kbase):
         """Test search with source filter."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Test Note\n\nContent for testing.")
             f.flush()
             filepath = f.name
 
-        temp_kb.ingest_file(filepath, metadata={"source": "manual"})
+        temp_kbase.ingest_file(filepath, metadata={"source": "manual"})
 
-        results = temp_kb.search("testing", filter_source="manual")
+        results = temp_kbase.search("testing", filter_source="manual")
         assert len(results) > 0
         assert results[0].source == "manual"
 
         # Filter should exclude results
-        results = temp_kb.search("testing", filter_source="other")
+        results = temp_kbase.search("testing", filter_source="other")
         assert len(results) == 0
 
         os.unlink(filepath)
 
-    def test_ingest_directory(self, temp_kb):
+    def test_ingest_directory(self, temp_kbase):
         """Test directory ingestion."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create multiple files
@@ -109,40 +109,40 @@ class TestKnowledgeBaseChroma:
                 with open(filepath, "w") as f:
                     f.write(f"# Note {i}\n\nContent number {i}.")
 
-            chunks = temp_kb.ingest_directory(tmpdir)
+            chunks = temp_kbase.ingest_directory(tmpdir)
             assert chunks >= 3  # At least one chunk per file
 
-    def test_delete_by_file(self, temp_kb):
+    def test_delete_by_file(self, temp_kbase):
         """Test deletion by file path."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Delete Test\n\nThis will be deleted.")
             f.flush()
             filepath = f.name
 
-        temp_kb.ingest_file(filepath)
-        assert temp_kb.count() > 0
+        temp_kbase.ingest_file(filepath)
+        assert temp_kbase.count() > 0
 
-        temp_kb.delete_by_file(filepath)
+        temp_kbase.delete_by_file(filepath)
         # Note: Chroma may not immediately reflect deletion
 
         os.unlink(filepath)
 
-    def test_clear(self, temp_kb):
-        """Test clearing KB."""
+    def test_clear(self, temp_kbase):
+        """Test clearing kbase."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Clear Test\n\nContent.")
             f.flush()
             filepath = f.name
 
-        temp_kb.ingest_file(filepath)
-        assert temp_kb.count() > 0
+        temp_kbase.ingest_file(filepath)
+        assert temp_kbase.count() > 0
 
-        temp_kb.clear()
-        assert temp_kb.count() == 0
+        temp_kbase.clear()
+        assert temp_kbase.count() == 0
 
         os.unlink(filepath)
 
-    def test_list_sources(self, temp_kb):
+    def test_list_sources(self, temp_kbase):
         """Test listing sources."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# Source Test One\n\nContent for logseq source.")
@@ -154,10 +154,10 @@ class TestKnowledgeBaseChroma:
             f.flush()
             filepath2 = f.name
 
-        temp_kb.ingest_file(filepath1, metadata={"source": "logseq"})
-        temp_kb.ingest_file(filepath2, metadata={"source": "manual"})
+        temp_kbase.ingest_file(filepath1, metadata={"source": "logseq"})
+        temp_kbase.ingest_file(filepath2, metadata={"source": "manual"})
 
-        sources = temp_kb.list_sources()
+        sources = temp_kbase.list_sources()
         assert "logseq" in sources
         assert "manual" in sources
 
@@ -169,29 +169,29 @@ class TestKnowledgeBaseChunking:
     """Test text chunking functionality."""
 
     @pytest.fixture
-    def temp_kb(self):
-        """Create temporary KB for testing."""
+    def temp_kbase(self):
+        """Create temporary kbase for testing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            kb = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
-            yield kb
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            yield kbase
 
-    def test_chunk_short_text(self, temp_kb):
+    def test_chunk_short_text(self, temp_kbase):
         """Test chunking of short text."""
         text = "Short text."
-        chunks = temp_kb._chunk_text(text, chunk_size=1000)
+        chunks = temp_kbase._chunk_text(text, chunk_size=1000)
         assert len(chunks) == 1
         assert chunks[0] == "Short text."
 
-    def test_chunk_long_text(self, temp_kb):
+    def test_chunk_long_text(self, temp_kbase):
         """Test chunking of long text."""
         text = "This is a long text. " * 100
-        chunks = temp_kb._chunk_text(text, chunk_size=500, chunk_overlap=100)
+        chunks = temp_kbase._chunk_text(text, chunk_size=500, chunk_overlap=100)
         assert len(chunks) > 1
 
-    def test_chunk_preserves_sentence_boundary(self, temp_kb):
+    def test_chunk_preserves_sentence_boundary(self, temp_kbase):
         """Test chunking respects sentence boundaries."""
         text = "First sentence here. Second sentence follows. Third sentence ends."
-        chunks = temp_kb._chunk_text(text, chunk_size=50)
+        chunks = temp_kbase._chunk_text(text, chunk_size=50)
         # Should try to break at periods
         for chunk in chunks:
             assert len(chunk) <= 60  # Allow slight overflow for sentence boundary
@@ -199,21 +199,21 @@ class TestKnowledgeBaseChunking:
 
 class TestKnowledgeBaseMetadata:
     def test_init_writes_metadata_file(self):
-        """KB initialization should persist embedding metadata."""
+        """kbase initialization should persist embedding metadata."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            kb = KnowledgeBase(
+            kbase = KnowledgeBase(
                 mode="chroma",
                 persist_dir=tmpdir,
                 embedding_model="nomic-embed-text",
                 embedding_dimension=768,
             )
 
-            metadata_path = os.path.join(tmpdir, "_kb_metadata.json")
+            metadata_path = os.path.join(tmpdir, "_kbase_metadata.json")
             assert os.path.exists(metadata_path)
-            assert kb.embedding_dimension == 768
+            assert kbase.embedding_dimension == 768
 
     def test_reopen_with_same_metadata_succeeds(self):
-        """Reopening a KB with matching embedding settings should work."""
+        """Reopening a kbase with matching embedding settings should work."""
         with tempfile.TemporaryDirectory() as tmpdir:
             KnowledgeBase(
                 mode="chroma",
@@ -233,7 +233,7 @@ class TestKnowledgeBaseMetadata:
             assert reopened.embedding_dimension == 768
 
     def test_reopen_with_mismatched_dimension_requires_reset(self):
-        """Changing embedding dimension should fail until the KB is reset."""
+        """Changing embedding dimension should fail until the kbase is reset."""
         with tempfile.TemporaryDirectory() as tmpdir:
             KnowledgeBase(
                 mode="chroma",
@@ -251,7 +251,7 @@ class TestKnowledgeBaseMetadata:
                 )
 
     def test_reopen_with_mismatched_model_requires_reset(self):
-        """Changing embedding model should fail until the KB is reset."""
+        """Changing embedding model should fail until the kbase is reset."""
         with tempfile.TemporaryDirectory() as tmpdir:
             KnowledgeBase(
                 mode="chroma",
@@ -283,11 +283,11 @@ class TestKnowledgeBaseStats:
             with open(file_two, "w", encoding="utf-8") as handle:
                 handle.write("# Two\n\nRust async cancellation guidance.")
 
-            kb = KnowledgeBase(mode="chroma", persist_dir=os.path.join(tmpdir, "kb"))
-            kb.ingest_file(file_one, metadata={"source": "manual"})
-            kb.ingest_file(file_two, metadata={"source": "web"})
+            kbase = KnowledgeBase(mode="chroma", persist_dir=os.path.join(tmpdir, "kbase"))
+            kbase.ingest_file(file_one, metadata={"source": "manual"})
+            kbase.ingest_file(file_two, metadata={"source": "web"})
 
-            stats = kb.stats()
+            stats = kbase.stats()
 
             assert stats["total_entries"] == 2
             assert stats["source_file_count"] == 2

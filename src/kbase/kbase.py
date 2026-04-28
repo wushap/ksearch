@@ -1,19 +1,19 @@
-"""Knowledge base management with vector database support.
+"""kbase management with vector database support.
 
 Supports two modes:
 - Chroma (embedded): Default, zero external dependencies
 - Qdrant (server): Production-grade, requires Docker service
 
 Usage:
-    kb = KnowledgeBase(mode="chroma")  # Embedded mode
-    kb = KnowledgeBase(mode="qdrant", url="http://localhost:6333")  # Server mode
+    kbase = KnowledgeBase(mode="chroma")  # Embedded mode
+    kbase = KnowledgeBase(mode="qdrant", url="http://localhost:6333")  # Server mode
 
     # Ingest documents
-    kb.ingest_file("~/docs/note.md", metadata={"source": "logseq"})
-    kb.ingest_directory("~/notes/", glob_pattern="*.md")
+    kbase.ingest_file("~/docs/note.md", metadata={"source": "logseq"})
+    kbase.ingest_directory("~/notes/", glob_pattern="*.md")
 
     # Search
-    results = kb.search("python async", top_k=5)
+    results = kbase.search("python async", top_k=5)
 """
 
 import hashlib
@@ -24,11 +24,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from ksearch.config import expand_path
+from kbase.config import expand_path
 
 
 @dataclass
-class KBEntry:
+class KnowledgeBaseEntry:
     """Knowledge base entry."""
     id: str
     content: str
@@ -49,7 +49,7 @@ class KBEntry:
 
 
 @dataclass
-class KBSearchResult:
+class KnowledgeBaseSearchResult:
     """Knowledge base search result."""
     id: str
     content: str
@@ -61,7 +61,7 @@ class KBSearchResult:
 
 
 class KnowledgeBase:
-    """Knowledge base with vector search support.
+    """kbase with vector search support.
 
     Provides document ingestion, semantic search, and metadata filtering.
     """
@@ -69,7 +69,7 @@ class KnowledgeBase:
     def __init__(
         self,
         mode: str = "chroma",
-        persist_dir: str = "~/.ksearch/kb",
+        persist_dir: str = "~/.kbase/kbase",
         qdrant_url: Optional[str] = None,
         embedding_model: str = "nomic-embed-text",
         embedding_dimension: int = 768,
@@ -90,8 +90,8 @@ class KnowledgeBase:
         self.embedding_model = embedding_model
         self.embedding_dimension = embedding_dimension
         self.ollama_url = ollama_url
-        self.collection_name = "knowledge_base"
-        self.metadata_path = os.path.join(self.persist_dir, "_kb_metadata.json")
+        self.collection_name = "kbase"
+        self.metadata_path = os.path.join(self.persist_dir, "_kbase_metadata.json")
 
         os.makedirs(self.persist_dir, exist_ok=True)
 
@@ -147,7 +147,7 @@ class KnowledgeBase:
             )
 
     def _expected_metadata(self) -> dict:
-        """Return metadata describing the current KB embedding configuration."""
+        """Return metadata describing the current kbase embedding configuration."""
         return {
             "mode": self.mode,
             "embedding_model": self.embedding_model,
@@ -155,7 +155,7 @@ class KnowledgeBase:
         }
 
     def _load_metadata(self) -> Optional[dict]:
-        """Load persisted KB metadata when present."""
+        """Load persisted kbase metadata when present."""
         if not os.path.exists(self.metadata_path):
             return None
 
@@ -163,18 +163,18 @@ class KnowledgeBase:
             return json.load(handle)
 
     def _write_metadata(self) -> None:
-        """Persist KB metadata for future compatibility checks."""
+        """Persist kbase metadata for future compatibility checks."""
         with open(self.metadata_path, "w", encoding="utf-8") as handle:
             json.dump(self._expected_metadata(), handle, indent=2)
 
     def _validate_or_initialize_metadata(self) -> None:
-        """Ensure the KB matches the configured embedding settings."""
+        """Ensure the kbase matches the configured embedding settings."""
         metadata = self._load_metadata()
         if metadata is None:
             if self.count() > 0:
                 raise ValueError(
-                    "KB metadata is missing for a non-empty knowledge base. "
-                    "Reset the KB before changing embedding settings."
+                    "kbase metadata is missing for a non-empty knowledge base. "
+                    "Reset the kbase before changing embedding settings."
                 )
             self._write_metadata()
             return
@@ -185,18 +185,18 @@ class KnowledgeBase:
 
         if stored_mode and stored_mode != self.mode:
             raise ValueError(
-                f"KB mode mismatch: stored '{stored_mode}', requested '{self.mode}'. "
-                "Reset the KB before switching modes."
+                f"kbase mode mismatch: stored '{stored_mode}', requested '{self.mode}'. "
+                "Reset the kbase before switching modes."
             )
         if stored_model and stored_model != self.embedding_model:
             raise ValueError(
-                f"KB embedding model mismatch: stored '{stored_model}', requested '{self.embedding_model}'. "
-                "Reset the KB before switching embedding model."
+                f"kbase embedding model mismatch: stored '{stored_model}', requested '{self.embedding_model}'. "
+                "Reset the kbase before switching embedding model."
             )
         if stored_dimension and stored_dimension != self.embedding_dimension:
             raise ValueError(
-                f"KB embedding dimension mismatch: stored '{stored_dimension}', requested '{self.embedding_dimension}'. "
-                "Reset the KB before switching embedding dimension."
+                f"kbase embedding dimension mismatch: stored '{stored_dimension}', requested '{self.embedding_dimension}'. "
+                "Reset the kbase before switching embedding dimension."
             )
 
         self._write_metadata()
@@ -297,7 +297,7 @@ class KnowledgeBase:
         entries = []
         for i, chunk in enumerate(chunks):
             entry_id = self._generate_id(file_path, chunk)
-            entry = KBEntry(
+            entry = KnowledgeBaseEntry(
                 id=entry_id,
                 content=chunk,
                 file_path=file_path,
@@ -390,7 +390,7 @@ class KnowledgeBase:
 
         return [c for c in chunks if c]
 
-    def _store_entries(self, entries: list[KBEntry]):
+    def _store_entries(self, entries: list[KnowledgeBaseEntry]):
         """Store entries in vector database."""
         if not entries:
             return
@@ -446,7 +446,7 @@ class KnowledgeBase:
         top_k: int = 5,
         filter_source: Optional[str] = None,
         filter_tags: Optional[list[str]] = None,
-    ) -> list[KBSearchResult]:
+    ) -> list[KnowledgeBaseSearchResult]:
         """Semantic search in knowledge base.
 
         Args:
@@ -456,7 +456,7 @@ class KnowledgeBase:
             filter_tags: Filter by tags
 
         Returns:
-            List of KBSearchResult
+            List of KnowledgeBaseSearchResult
         """
         embedding = self._get_embedding(query)
 
@@ -477,7 +477,7 @@ class KnowledgeBase:
                 distance = results["distances"][0][i]
                 score = 1.0 - distance  # Cosine similarity
 
-                search_results.append(KBSearchResult(
+                search_results.append(KnowledgeBaseSearchResult(
                     id=results["ids"][0][i],
                     content=doc,
                     file_path=meta.get("file_path", ""),
@@ -511,7 +511,7 @@ class KnowledgeBase:
 
             search_results = []
             for hit in results:
-                search_results.append(KBSearchResult(
+                search_results.append(KnowledgeBaseSearchResult(
                     id=str(hit.id),
                     content=hit.payload.get("content", ""),
                     file_path=hit.payload.get("file_path", ""),
@@ -577,7 +577,7 @@ class KnowledgeBase:
         self._write_metadata()
 
     def reset(self):
-        """Reset KB contents and refresh compatibility metadata."""
+        """Reset kbase contents and refresh compatibility metadata."""
         self.clear()
 
     def list_sources(self) -> list[str]:
@@ -648,7 +648,7 @@ class KnowledgeBase:
         entries = []
         for i, chunk in enumerate(chunks):
             entry_id = self._generate_id(file_path, chunk)
-            entry = KBEntry(
+            entry = KnowledgeBaseEntry(
                 id=entry_id,
                 content=chunk,
                 file_path=file_path,
@@ -667,7 +667,7 @@ class KnowledgeBase:
         return len(entries)
 
     def stats(self) -> dict:
-        """Summarize KB entries, source files, content size, and source distribution."""
+        """Summarize kbase entries, source files, content size, and source distribution."""
         if self.mode == "chroma":
             results = self._collection.get(include=["metadatas"])
             metadatas = results.get("metadatas", [])

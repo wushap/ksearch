@@ -1,6 +1,6 @@
-"""Tests for kb.models module."""
+"""Tests for kbase.models module."""
 
-from ksearch.models import CacheEntry, SearchResult, ResultEntry
+from kbase.models import CacheEntry, SearchResult, ResultEntry
 
 
 def test_cache_entry_creation():

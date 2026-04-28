@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 import time
 
-from ksearch.iterative import (
+from kbase.iterative import (
     ConvergenceEvaluator,
     ConvergenceResult,
     IterationBoundary,
@@ -12,8 +12,8 @@ from ksearch.iterative import (
     SufficiencyEvaluator,
     IterativeSearchEngine,
 )
-from ksearch.kb import KBSearchResult
-from ksearch.models import ResultEntry
+from kbase.kbase import KnowledgeBaseSearchResult
+from kbase.models import ResultEntry
 
 
 class TestConvergenceEvaluator:
@@ -33,21 +33,21 @@ class TestConvergenceEvaluator:
             redundancy_threshold=0.50,
         )
 
-    def make_kb_result(self, id: str, score: float, content: str = "test content") -> KBSearchResult:
-        """Helper to create KBSearchResult."""
-        return KBSearchResult(
+    def make_kbase_result(self, id: str, score: float, content: str = "test content") -> KnowledgeBaseSearchResult:
+        """Helper to create KnowledgeBaseSearchResult."""
+        return KnowledgeBaseSearchResult(
             id=id,
             content=content,
             file_path=f"/path/{id}",
             title=f"Title {id}",
-            source="kb",
+            source="kbase",
             score=score,
             metadata={},
         )
 
     def test_check_convergence_with_none_prev_results(self, evaluator):
         """Test check_convergence with None prev_results (first iteration)."""
-        current = [self.make_kb_result("a", 0.8)]
+        current = [self.make_kbase_result("a", 0.8)]
         result = evaluator.check_convergence(None, current)
 
         assert result.is_converged is False
@@ -58,7 +58,7 @@ class TestConvergenceEvaluator:
 
     def test_check_convergence_with_empty_prev_results(self, evaluator):
         """Test check_convergence with empty prev_results list."""
-        current = [self.make_kb_result("a", 0.8)]
+        current = [self.make_kbase_result("a", 0.8)]
         result = evaluator.check_convergence([], current)
 
         assert result.is_converged is False
@@ -69,8 +69,8 @@ class TestConvergenceEvaluator:
     def test_convergence_when_two_factors_met(self, evaluator):
         """Test convergence when 2+ factors are met."""
         # Create results with same IDs (high overlap) and similar scores (low delta)
-        prev = [self.make_kb_result("a", 0.80), self.make_kb_result("b", 0.75)]
-        current = [self.make_kb_result("a", 0.81), self.make_kb_result("b", 0.76)]
+        prev = [self.make_kbase_result("a", 0.80), self.make_kbase_result("b", 0.75)]
+        current = [self.make_kbase_result("a", 0.81), self.make_kbase_result("b", 0.76)]
 
         result = evaluator.check_convergence(prev, current)
 
@@ -86,12 +86,12 @@ class TestConvergenceEvaluator:
         """Test non-convergence when only 1 factor is met."""
         # Create results with same IDs but different scores AND different content
         prev = [
-            self.make_kb_result("a", 0.10, "previous content for item a"),
-            self.make_kb_result("b", 0.15, "previous content for item b"),
+            self.make_kbase_result("a", 0.10, "previous content for item a"),
+            self.make_kbase_result("b", 0.15, "previous content for item b"),
         ]
         current = [
-            self.make_kb_result("a", 0.80, "current content for item a different"),
-            self.make_kb_result("b", 0.85, "current content for item b different"),
+            self.make_kbase_result("a", 0.80, "current content for item a different"),
+            self.make_kbase_result("b", 0.85, "current content for item b different"),
         ]
 
         result = evaluator.check_convergence(prev, current)
@@ -108,8 +108,8 @@ class TestConvergenceEvaluator:
 
     def test_score_delta_threshold_calculation(self, evaluator):
         """Test score_delta threshold calculation."""
-        prev = [self.make_kb_result("a", 0.80)]
-        current = [self.make_kb_result("b", 0.84)]  # 5% change
+        prev = [self.make_kbase_result("a", 0.80)]
+        current = [self.make_kbase_result("b", 0.84)]  # 5% change
 
         result = evaluator.check_convergence(prev, current)
 
@@ -120,14 +120,14 @@ class TestConvergenceEvaluator:
         """Test overlap_ratio calculation."""
         # 3 previous, 3 current, 2 overlap
         prev = [
-            self.make_kb_result("a", 0.8),
-            self.make_kb_result("b", 0.8),
-            self.make_kb_result("c", 0.8),
+            self.make_kbase_result("a", 0.8),
+            self.make_kbase_result("b", 0.8),
+            self.make_kbase_result("c", 0.8),
         ]
         current = [
-            self.make_kb_result("a", 0.8),
-            self.make_kb_result("b", 0.8),
-            self.make_kb_result("d", 0.8),
+            self.make_kbase_result("a", 0.8),
+            self.make_kbase_result("b", 0.8),
+            self.make_kbase_result("d", 0.8),
         ]
 
         result = evaluator.check_convergence(prev, current)
@@ -139,8 +139,8 @@ class TestConvergenceEvaluator:
         """Test redundancy_ratio calculation."""
         # Same content = high redundancy
         content = "identical test content here"
-        prev = [self.make_kb_result("a", 0.8, content)]
-        current = [self.make_kb_result("b", 0.8, content)]
+        prev = [self.make_kbase_result("a", 0.8, content)]
+        current = [self.make_kbase_result("b", 0.8, content)]
 
         result = evaluator.check_convergence(prev, current)
 
@@ -149,8 +149,8 @@ class TestConvergenceEvaluator:
 
     def test_redundancy_ratio_different_content(self, evaluator):
         """Test redundancy_ratio with different content."""
-        prev = [self.make_kb_result("a", 0.8, "completely different content one")]
-        current = [self.make_kb_result("b", 0.8, "totally other content two")]
+        prev = [self.make_kbase_result("a", 0.8, "completely different content one")]
+        current = [self.make_kbase_result("b", 0.8, "totally other content two")]
 
         result = evaluator.check_convergence(prev, current)
 
@@ -159,8 +159,8 @@ class TestConvergenceEvaluator:
 
     def test_custom_thresholds(self, evaluator_custom):
         """Test convergence with custom thresholds."""
-        prev = [self.make_kb_result("a", 0.80), self.make_kb_result("b", 0.75)]
-        current = [self.make_kb_result("a", 0.85), self.make_kb_result("b", 0.80)]
+        prev = [self.make_kbase_result("a", 0.80), self.make_kbase_result("b", 0.75)]
+        current = [self.make_kbase_result("a", 0.85), self.make_kbase_result("b", 0.80)]
 
         result = evaluator_custom.check_convergence(prev, current)
 
@@ -290,14 +290,14 @@ class TestSufficiencyEvaluator:
         """Create sufficiency evaluator."""
         return SufficiencyEvaluator()
 
-    def make_kb_result(self, score: float, content: str = "test content") -> KBSearchResult:
-        """Helper to create KBSearchResult."""
-        return KBSearchResult(
+    def make_kbase_result(self, score: float, content: str = "test content") -> KnowledgeBaseSearchResult:
+        """Helper to create KnowledgeBaseSearchResult."""
+        return KnowledgeBaseSearchResult(
             id=f"result_{score}",
             content=content,
             file_path="/path/test",
             title="Test",
-            source="kb",
+            source="kbase",
             score=score,
             metadata={},
         )
@@ -310,7 +310,7 @@ class TestSufficiencyEvaluator:
     def test_score_with_results_meeting_max_thresholds(self, evaluator):
         """Test score with results meeting max thresholds."""
         # 10+ results, high scores, good content length
-        results = [self.make_kb_result(0.9, "x" * 500) for _ in range(10)]
+        results = [self.make_kbase_result(0.9, "x" * 500) for _ in range(10)]
 
         score = evaluator.score(results)
 
@@ -321,7 +321,7 @@ class TestSufficiencyEvaluator:
     def test_score_with_results_between_min_max_thresholds(self, evaluator):
         """Test score with results between min/max thresholds."""
         # 5 results (between 3 and 10)
-        results = [self.make_kb_result(0.7, "x" * 300) for _ in range(5)]
+        results = [self.make_kbase_result(0.7, "x" * 300) for _ in range(5)]
 
         score = evaluator.score(results)
 
@@ -331,7 +331,7 @@ class TestSufficiencyEvaluator:
     def test_score_with_min_results(self, evaluator):
         """Test score with minimum results."""
         # 3 results (MIN_RESULTS_FOR_MIN_SCORE)
-        results = [self.make_kb_result(0.5, "x" * 200) for _ in range(3)]
+        results = [self.make_kbase_result(0.5, "x" * 200) for _ in range(3)]
 
         score = evaluator.score(results)
 
@@ -387,12 +387,12 @@ class TestIterativeSearchEngine:
     """Tests for IterativeSearchEngine class (integration-style with mocks)."""
 
     @pytest.fixture
-    def mock_kb(self):
+    def mock_kbase(self):
         """Create mock KnowledgeBase."""
-        kb = Mock()
-        kb.search = Mock(return_value=[])
-        kb.ingest_file_from_content = Mock(return_value=1)
-        return kb
+        kbase = Mock()
+        kbase.search = Mock(return_value=[])
+        kbase.ingest_file_from_content = Mock(return_value=1)
+        return kbase
 
     @pytest.fixture
     def mock_searxng(self):
@@ -425,7 +425,7 @@ class TestIterativeSearchEngine:
         return {
             "max_iterations": 5,
             "max_time_seconds": 180,
-            "kb_top_k": 5,
+            "kbase_top_k": 5,
             "max_results": 5,
             "fact_threshold": 0.7,
             "exploration_threshold": 0.4,
@@ -433,58 +433,58 @@ class TestIterativeSearchEngine:
         }
 
     @pytest.fixture
-    def engine(self, mock_kb, mock_searxng, mock_converter, mock_cache, config):
+    def engine(self, mock_kbase, mock_searxng, mock_converter, mock_cache, config):
         """Create IterativeSearchEngine with mocks."""
         return IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
             config=config,
         )
 
-    def make_kb_result(self, score: float = 0.9, idx: int = None) -> KBSearchResult:
-        """Helper to create KBSearchResult with optional unique identifiers."""
+    def make_kbase_result(self, score: float = 0.9, idx: int = None) -> KnowledgeBaseSearchResult:
+        """Helper to create KnowledgeBaseSearchResult with optional unique identifiers."""
         if idx is None:
             # Legacy behavior for simple tests
-            return KBSearchResult(
-                id="kb_result",
-                content="KB content",
-                file_path="/kb/path",
-                title="KB Title",
-                source="kb",
+            return KnowledgeBaseSearchResult(
+                id="kbase_result",
+                content="kbase content",
+                file_path="/kbase/path",
+                title="kbase Title",
+                source="kbase",
                 score=score,
                 metadata={"created_at": "2024-01-01"},
             )
         # Unique identifiers for deduplication tests
-        return KBSearchResult(
-            id=f"kb_result_{idx}",
-            content=f"KB content for result {idx} with enough text to meet coverage requirements and pass the sufficiency threshold calculation",
-            file_path=f"/kb/path/{idx}",
-            title=f"KB Title {idx}",
-            source="kb",
+        return KnowledgeBaseSearchResult(
+            id=f"kbase_result_{idx}",
+            content=f"kbase content for result {idx} with enough text to meet coverage requirements and pass the sufficiency threshold calculation",
+            file_path=f"/kbase/path/{idx}",
+            title=f"kbase Title {idx}",
+            source="kbase",
             score=score,
             metadata={"created_at": "2024-01-01"},
         )
 
-    def test_search_returns_kb_results_when_sufficient(self, engine):
-        """Test search returns KB results when sufficient."""
-        # High-scoring KB results with unique identifiers and long content
-        kb_results = [self.make_kb_result(0.9, idx=i) for i in range(10)]
-        engine.kb.search = Mock(return_value=kb_results)
+    def test_search_returns_kbase_results_when_sufficient(self, engine):
+        """Test search returns kbase results when sufficient."""
+        # High-scoring kbase results with unique identifiers and long content
+        kbase_results = [self.make_kbase_result(0.9, idx=i) for i in range(10)]
+        engine.kbase.search = Mock(return_value=kbase_results)
 
         results = engine.search("how to test")
 
-        # Should return exactly 10 KB results without web search
+        # Should return exactly 10 kbase results without web search
         assert len(results) == 10
-        assert all(r.source == "kb" for r in results)
+        assert all(r.source == "kbase" for r in results)
         engine.searxng.search.assert_not_called()
 
-    def test_search_triggers_web_search_when_insufficient(self, mock_kb, mock_searxng, engine):
-        """Test search triggers web search when KB insufficient."""
-        # Low KB results
-        kb_results = [self.make_kb_result(0.3) for _ in range(2)]
-        mock_kb.search = Mock(return_value=kb_results)
+    def test_search_triggers_web_search_when_insufficient(self, mock_kbase, mock_searxng, engine):
+        """Test search triggers web search when kbase insufficient."""
+        # Low kbase results
+        kbase_results = [self.make_kbase_result(0.3) for _ in range(2)]
+        mock_kbase.search = Mock(return_value=kbase_results)
 
         # Set up web search
         web_result = Mock()
@@ -497,13 +497,13 @@ class TestIterativeSearchEngine:
         # Should have triggered web search
         mock_searxng.search.assert_called()
 
-    def test_iteration_stops_at_max_iterations_boundary(self, mock_kb, mock_searxng, mock_converter, mock_cache):
+    def test_iteration_stops_at_max_iterations_boundary(self, mock_kbase, mock_searxng, mock_converter, mock_cache):
         """Test iteration stops at max_iterations boundary."""
         config = {"max_iterations": 2, "max_time_seconds": 180}
 
-        # KB always returns insufficient results
-        kb_results = [self.make_kb_result(0.1)]
-        mock_kb.search = Mock(return_value=kb_results)
+        # kbase always returns insufficient results
+        kbase_results = [self.make_kbase_result(0.1)]
+        mock_kbase.search = Mock(return_value=kbase_results)
 
         # Web search always returns new URL
         web_result = Mock()
@@ -512,7 +512,7 @@ class TestIterativeSearchEngine:
         mock_searxng.search = Mock(return_value=[web_result])
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
@@ -526,11 +526,11 @@ class TestIterativeSearchEngine:
         # Web search may be called multiple times but limited by boundary
         assert mock_searxng.search.call_count <= config["max_iterations"] + 1
 
-    def test_kb_auto_ingestion_from_web_results(self, mock_kb, mock_searxng, mock_converter, mock_cache, config):
-        """Test KB auto-ingestion from web results."""
-        # KB returns low results
-        kb_results = [self.make_kb_result(0.2)]
-        mock_kb.search = Mock(return_value=kb_results)
+    def test_kbase_auto_ingestion_from_web_results(self, mock_kbase, mock_searxng, mock_converter, mock_cache, config):
+        """Test kbase auto-ingestion from web results."""
+        # kbase returns low results
+        kbase_results = [self.make_kbase_result(0.2)]
+        mock_kbase.search = Mock(return_value=kbase_results)
 
         # Web returns new URL
         web_result = Mock()
@@ -539,7 +539,7 @@ class TestIterativeSearchEngine:
         mock_searxng.search = Mock(return_value=[web_result])
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
@@ -548,12 +548,12 @@ class TestIterativeSearchEngine:
 
         results = engine.search("test")
 
-        # KB should have ingested web content
-        mock_kb.ingest_file_from_content.assert_called()
+        # kbase should have ingested web content
+        mock_kbase.ingest_file_from_content.assert_called()
 
-    def test_iterative_search_saves_web_results_to_cache(self, mock_kb, mock_searxng, mock_converter, config):
+    def test_iterative_search_saves_web_results_to_cache(self, mock_kbase, mock_searxng, mock_converter, config):
         """Test iterative search persists converted web content into cache."""
-        mock_kb.search = Mock(return_value=[self.make_kb_result(0.1)])
+        mock_kbase.search = Mock(return_value=[self.make_kbase_result(0.1)])
 
         web_result = Mock()
         web_result.url = "https://example.com/iterative"
@@ -567,11 +567,11 @@ class TestIterativeSearchEngine:
         mock_cache.save = Mock(return_value="/tmp/iterative.md")
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
-            config={"max_iterations": 1, "max_results": 5, "kb_top_k": 5},
+            config={"max_iterations": 1, "max_results": 5, "kbase_top_k": 5},
         )
 
         results = engine.search("test")
@@ -580,9 +580,9 @@ class TestIterativeSearchEngine:
         assert any(entry.file_path == "/tmp/iterative.md" for entry in results)
         assert any(entry.cached is False for entry in results)
 
-    def test_iterative_search_skips_repeated_urls_within_same_run(self, mock_kb, mock_converter, mock_cache):
+    def test_iterative_search_skips_repeated_urls_within_same_run(self, mock_kbase, mock_converter, mock_cache):
         """Test iterative search does not reconvert the same URL across iterations."""
-        mock_kb.search = Mock(return_value=[self.make_kb_result(0.1)])
+        mock_kbase.search = Mock(return_value=[self.make_kbase_result(0.1)])
 
         web_result = Mock()
         web_result.url = "https://repeat.example.com"
@@ -596,24 +596,24 @@ class TestIterativeSearchEngine:
         mock_cache.save = Mock(return_value="/tmp/repeat.md")
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
-            config={"max_iterations": 3, "max_results": 5, "kb_top_k": 5},
+            config={"max_iterations": 3, "max_results": 5, "kbase_top_k": 5},
         )
 
         engine.search("test")
 
         assert mock_converter.convert_url.call_count == 1
 
-    def test_convergence_stops_iteration(self, mock_kb, mock_searxng, mock_converter, mock_cache):
+    def test_convergence_stops_iteration(self, mock_kbase, mock_searxng, mock_converter, mock_cache):
         """Test convergence stops iteration early."""
         config = {"max_iterations": 10}
 
-        # KB returns same results each time
-        kb_results = [self.make_kb_result(0.5)]
-        mock_kb.search = Mock(return_value=kb_results)
+        # kbase returns same results each time
+        kbase_results = [self.make_kbase_result(0.5)]
+        mock_kbase.search = Mock(return_value=kbase_results)
 
         # Web search returns same URL each time (will trigger convergence)
         web_result = Mock()
@@ -625,7 +625,7 @@ class TestIterativeSearchEngine:
         mock_converter.convert_url = Mock(return_value="Same content every time")
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
@@ -638,63 +638,63 @@ class TestIterativeSearchEngine:
         # Note: Due to convergence logic, iteration may stop before max
         assert mock_searxng.search.call_count < config["max_iterations"]
 
-    def test_convert_kb_results(self, engine):
-        """Test _convert_kb_results method."""
-        kb_results = [self.make_kb_result(0.9)]
+    def test_convert_kbase_results(self, engine):
+        """Test _convert_kbase_results method."""
+        kbase_results = [self.make_kbase_result(0.9)]
 
-        converted = engine._convert_kb_results(kb_results)
+        converted = engine._convert_kbase_results(kbase_results)
 
         assert len(converted) == 1
         assert isinstance(converted[0], ResultEntry)
-        assert converted[0].url == "/kb/path"
-        assert converted[0].title == "KB Title"
+        assert converted[0].url == "/kbase/path"
+        assert converted[0].title == "kbase Title"
 
     def test_combine_results_deduplication(self, engine):
         """Test _combine_results deduplicates by file_path."""
-        kb_results = [self.make_kb_result(0.9)]
+        kbase_results = [self.make_kbase_result(0.9)]
 
         # Web entry with same file_path
         web_entry = ResultEntry(
             url="https://example.com",
             title="Web Title",
             content="Web content",
-            file_path="/kb/path",  # Same as KB
+            file_path="/kbase/path",  # Same as kbase
             cached=True,
             source="web",
             cached_date="2024-01-01",
         )
 
-        combined = engine._combine_results(kb_results, [web_entry])
+        combined = engine._combine_results(kbase_results, [web_entry])
 
-        # Should deduplicate, KB entry wins
+        # Should deduplicate, kbase entry wins
         assert len(combined) == 1
-        assert combined[0].source == "kb"
+        assert combined[0].source == "kbase"
 
     def test_combine_results_different_paths(self, engine):
         """Test _combine_results keeps entries with different paths."""
-        kb_results = [self.make_kb_result(0.9)]
+        kbase_results = [self.make_kbase_result(0.9)]
 
         web_entry = ResultEntry(
             url="https://example.com",
             title="Web Title",
             content="Web content",
-            file_path="/different/path",  # Different from KB
+            file_path="/different/path",  # Different from kbase
             cached=True,
             source="web",
             cached_date="2024-01-01",
         )
 
-        combined = engine._combine_results(kb_results, [web_entry])
+        combined = engine._combine_results(kbase_results, [web_entry])
 
         # Both should be included
         assert len(combined) == 2
         sources = [r.source for r in combined]
-        assert "kb" in sources
+        assert "kbase" in sources
         assert "web" in sources
 
-    def test_convert_kb_results_prefers_original_url_metadata(self, engine):
-        """Test converted KB results keep original web URL when available."""
-        kb_result = KBSearchResult(
+    def test_convert_kbase_results_prefers_original_url_metadata(self, engine):
+        """Test converted kbase results keep original web URL when available."""
+        kbase_result = KnowledgeBaseSearchResult(
             id="web_1",
             content="Converted web content",
             file_path="/tmp/store/web.md",
@@ -704,15 +704,15 @@ class TestIterativeSearchEngine:
             metadata={"url": "https://example.com/article", "created_at": "2024-01-01"},
         )
 
-        converted = engine._convert_kb_results([kb_result])
+        converted = engine._convert_kbase_results([kbase_result])
 
         assert converted[0].url == "https://example.com/article"
         assert converted[0].file_path == "/tmp/store/web.md"
 
-    def test_combine_results_deduplicates_kb_chunks_by_file_path(self, engine):
-        """Test KB chunk results from the same file collapse into one output entry."""
-        kb_results = [
-            KBSearchResult(
+    def test_combine_results_deduplicates_kbase_chunks_by_file_path(self, engine):
+        """Test kbase chunk results from the same file collapse into one output entry."""
+        kbase_results = [
+            KnowledgeBaseSearchResult(
                 id="chunk_1",
                 content="chunk one",
                 file_path="/tmp/store/web.md",
@@ -721,7 +721,7 @@ class TestIterativeSearchEngine:
                 score=0.9,
                 metadata={"url": "https://example.com/article", "created_at": "2024-01-01"},
             ),
-            KBSearchResult(
+            KnowledgeBaseSearchResult(
                 id="chunk_2",
                 content="chunk two",
                 file_path="/tmp/store/web.md",
@@ -732,15 +732,15 @@ class TestIterativeSearchEngine:
             ),
         ]
 
-        combined = engine._combine_results(kb_results, [])
+        combined = engine._combine_results(kbase_results, [])
 
         assert len(combined) == 1
         assert combined[0].url == "https://example.com/article"
 
-    def test_cache_check_prevents_duplicate_conversion(self, mock_kb, mock_searxng, mock_converter, mock_cache):
+    def test_cache_check_prevents_duplicate_conversion(self, mock_kbase, mock_searxng, mock_converter, mock_cache):
         """Test cache check prevents duplicate conversion."""
-        # KB insufficient
-        mock_kb.search = Mock(return_value=[self.make_kb_result(0.1)])
+        # kbase insufficient
+        mock_kbase.search = Mock(return_value=[self.make_kbase_result(0.1)])
 
         # URL already cached
         web_result = Mock()
@@ -750,7 +750,7 @@ class TestIterativeSearchEngine:
         mock_cache.exists = Mock(return_value=True)  # Already cached
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
@@ -762,16 +762,16 @@ class TestIterativeSearchEngine:
         # Converter should not be called for cached URL
         mock_converter.convert_url.assert_not_called()
 
-    def test_empty_web_search_results(self, mock_kb, mock_searxng, mock_converter, mock_cache, config):
+    def test_empty_web_search_results(self, mock_kbase, mock_searxng, mock_converter, mock_cache, config):
         """Test handling of empty web search results."""
-        # KB insufficient
-        mock_kb.search = Mock(return_value=[self.make_kb_result(0.1)])
+        # kbase insufficient
+        mock_kbase.search = Mock(return_value=[self.make_kbase_result(0.1)])
 
         # Web search returns empty
         mock_searxng.search = Mock(return_value=[])
 
         engine = IterativeSearchEngine(
-            kb=mock_kb,
+            kbase=mock_kbase,
             searxng_client=mock_searxng,
             converter=mock_converter,
             cache=mock_cache,
@@ -780,7 +780,7 @@ class TestIterativeSearchEngine:
 
         results = engine.search("test")
 
-        # Should still return KB results
+        # Should still return kbase results
         assert len(results) >= 1
 
 

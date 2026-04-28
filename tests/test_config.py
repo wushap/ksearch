@@ -1,11 +1,11 @@
-"""Tests for kb.config module."""
+"""Tests for kbase.config module."""
 
 import json
 import tempfile
 import os
 from pathlib import Path
 
-from ksearch.config import (
+from kbase.config import (
     DEFAULT_CONFIG,
     load_config,
     merge_config,
@@ -18,6 +18,9 @@ def test_default_config_structure():
     assert "store_dir" in DEFAULT_CONFIG
     assert DEFAULT_CONFIG["max_results"] == 10
     assert DEFAULT_CONFIG["format"] == "markdown"
+    assert DEFAULT_CONFIG["store_dir"] == "~/.kbase/store"
+    assert DEFAULT_CONFIG["index_db"] == "~/.kbase/index.db"
+    assert DEFAULT_CONFIG["kbase_dir"] == "~/.kbase/kbase"
     assert DEFAULT_CONFIG["iterative_enabled"] is False
     assert DEFAULT_CONFIG["embedding_dimension"] == 768
     assert DEFAULT_CONFIG["max_iterations"] == 5
@@ -89,14 +92,14 @@ def test_merge_config_preserves_iterative_defaults():
 
 
 def test_merge_config_applies_iterative_cli_override():
-    file_config = {"kb_mode": "chroma"}
+    file_config = {"kbase_mode": "chroma"}
     cli_args = {"iterative_enabled": True, "max_iterations": 2}
 
     result = merge_config(cli_args, file_config, DEFAULT_CONFIG)
 
     assert result["iterative_enabled"] is True
     assert result["max_iterations"] == 2
-    assert result["kb_mode"] == "chroma"
+    assert result["kbase_mode"] == "chroma"
 
 
 def test_merge_config_preserves_embedding_dimension_override():
@@ -106,3 +109,20 @@ def test_merge_config_preserves_embedding_dimension_override():
     result = merge_config(cli_args, file_config, DEFAULT_CONFIG)
 
     assert result["embedding_dimension"] == 768
+
+
+def test_load_config_maps_legacy_only_kb_key():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = os.path.join(tmpdir, "config.json")
+        with open(config_path, "w") as f:
+            json.dump({"only_kb": True}, f)
+
+        result = load_config(config_path)
+
+        assert result["only_kbase"] is True
+
+
+def test_merge_config_preserves_only_kbase_setting():
+    result = merge_config({}, {"only_kbase": True}, DEFAULT_CONFIG)
+
+    assert result["only_kbase"] is True

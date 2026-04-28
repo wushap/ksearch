@@ -17,7 +17,7 @@ import hashlib
 import logging
 from typing import Optional
 
-from ksearch.config import expand_path
+from kbase.config import expand_path
 
 logger = logging.getLogger(__name__)
 

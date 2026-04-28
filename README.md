@@ -1,24 +1,24 @@
-# ksearch
+# kbase
 
 English | [简体中文](./README.zh-CN.md)
 
-`ksearch` is a research-oriented CLI that combines local cache, semantic knowledge-base retrieval, and live web search in one workflow.
+`kbase` is a research-oriented CLI that combines local cache, semantic knowledge-base retrieval, and live web search in one workflow.
 
-Instead of treating search as a stateless query, `ksearch` turns each run into reusable local knowledge:
+Instead of treating search as a stateless query, `kbase` turns each run into reusable local knowledge:
 
 - cache-first web search to avoid repeated fetching and conversion
-- KB semantic retrieval on top of Chroma or Qdrant
-- iterative KB-first search that expands to the web only when local knowledge is insufficient
+- kbase semantic retrieval on top of Chroma or Qdrant
+- iterative kbase-first search that expands to the web only when local knowledge is insufficient
 - automatic web-to-Markdown conversion for reuse and later ingestion
-- safer embedding model switching with KB metadata validation
-- unified cache + KB statistics for observability
+- safer embedding model switching with kbase metadata validation
+- unified cache + kbase statistics for observability
 
-## Why ksearch
+## Why kbase
 
 Most CLI search tools stop at "return search results".  
-`ksearch` is built for an incremental knowledge loop:
+`kbase` is built for an incremental knowledge loop:
 
-1. search local cache and semantic KB first
+1. search local cache and semantic kbase first
 2. fetch the web only when needed
 3. clean and convert pages into Markdown
 4. persist them locally
@@ -33,29 +33,29 @@ This makes it useful for:
 
 ## Highlights
 
-### KB-first Retrieval, Not Just Web Search
+### kbase-first Retrieval, Not Just Web Search
 
-Use plain cached search, semantic KB retrieval, or iterative KB-first expansion depending on the task.
+Use plain cached search, semantic kbase retrieval, or iterative kbase-first expansion depending on the task.
 
 ### Better Content Extraction
 
-`ksearch` now prefers `trafilatura` for main-body extraction and falls back to `markitdown`, which improves article cleanliness and reduces boilerplate noise.
+`kbase` now prefers `trafilatura` for main-body extraction and falls back to `markitdown`, which improves article cleanliness and reduces boilerplate noise.
 
 ### Safer Embedding Changes
 
-KB metadata stores embedding model and dimension. If you switch embedding settings, `ksearch` will block mismatched KB reuse and require an explicit reset.
+kbase metadata stores embedding model and dimension. If you switch embedding settings, `kbase` will block mismatched kbase reuse and require an explicit reset.
 
 ### Unified Statistics
 
-`ksearch stats` shows:
+`kbase stats` shows:
 
 - cache entry count
-- KB entry count
+- kbase entry count
 - total size
 - keyword variety
 - website/domain distribution
 - search engine distribution
-- KB source distribution
+- kbase source distribution
 - embedding configuration
 
 ### Live E2E Validation
@@ -84,23 +84,23 @@ uv pip install -e ".[all]"
 Basic search:
 
 ```bash
-ksearch search "python asyncio"
+kbase search "python asyncio"
 ```
 
 Common variants:
 
 ```bash
-ksearch search "rust async" --only-cache
-ksearch search "agent memory" --no-cache
-ksearch search "latest ai trends" --time-range week --max-results 5
-ksearch search "python asyncio" --format path
-ksearch search "vector database" --verbose
+kbase search "rust async" --only-cache
+kbase search "agent memory" --no-cache
+kbase search "latest ai trends" --time-range week --max-results 5
+kbase search "python asyncio" --format path
+kbase search "vector database" --verbose
 ```
 
 Unified statistics:
 
 ```bash
-ksearch stats
+kbase stats
 ```
 
 ## Common Workflows
@@ -108,45 +108,45 @@ ksearch stats
 ### 1. Cache-first Search
 
 ```bash
-ksearch search "python asyncio"
+kbase search "python asyncio"
 ```
 
 Use this for normal interactive search with local reuse.
 
-### 2. KB-assisted Search
+### 2. kbase-assisted Search
 
 ```bash
-ksearch search "task cancellation" --kb chroma
+kbase search "task cancellation" --kbase chroma
 ```
 
 Use this when you already have local notes or previously ingested material.
 
-### 3. KB-only Semantic Retrieval
+### 3. kbase-only Semantic Retrieval
 
 ```bash
-ksearch kb search "asyncio cancellation" --top-k 5
+kbase query "asyncio cancellation" --top-k 5
 ```
 
 Use this when you want semantic retrieval without new web fetching.
 
-### 4. Iterative KB-first Search
+### 4. Iterative kbase-first Search
 
 ```bash
-ksearch search "how does asyncio cancellation propagate" --kb chroma --iterative
+kbase search "how does asyncio cancellation propagate" --kbase chroma --iterative
 ```
 
-Use this when local knowledge may be incomplete and you want controlled web expansion plus KB ingestion.
+Use this when local knowledge may be incomplete and you want controlled web expansion plus kbase ingestion.
 
 ## Knowledge Base Commands
 
 ```bash
-ksearch kb ingest ~/notes --source logseq --verbose
-ksearch kb ingest ~/docs/readme.md --source manual
-ksearch kb search "async programming best practices" --top-k 5
-ksearch kb list
-ksearch kb delete ~/old-notes/test.md
-ksearch kb clear --confirm
-ksearch kb reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
+kbase ingest ~/notes --source logseq --verbose
+kbase ingest ~/docs/readme.md --source manual
+kbase query "async programming best practices" --top-k 5
+kbase list
+kbase delete ~/old-notes/test.md
+kbase clear --confirm
+kbase reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
 ```
 
 ## Iterative Search
@@ -154,32 +154,32 @@ ksearch kb reset --confirm --embedding-model nomic-embed-text --embedding-dimens
 Iterative mode is a sufficiency-driven orchestration layer:
 
 1. classify the query style
-2. search the KB first
+2. search the kbase first
 3. score result sufficiency
 4. fetch the web only if needed
 5. convert pages to Markdown
-6. save to cache and ingest into the KB
+6. save to cache and ingest into the kbase
 7. stop when sufficiency or hard limits are reached
 
 Notes:
 
-- `--iterative` requires `--kb chroma` or `--kb qdrant`
+- `--iterative` requires `--kbase chroma` or `--kbase qdrant`
 - iterative mode keeps new web material in local cache for later reuse
 
 ## Embedding Safety
 
-Embedding settings used by the KB must stay consistent with stored vectors.
+Embedding settings used by the kbase must stay consistent with stored vectors.
 
-- changing `embedding_model` or `embedding_dimension` invalidates old KB vectors
-- KB metadata is persisted and checked on open
+- changing `embedding_model` or `embedding_dimension` invalidates old kbase vectors
+- kbase metadata is persisted and checked on open
 - mismatched configuration requires an explicit reset
 
 Example:
 
 ```bash
-ksearch config --embedding-model mxbai-embed-large --embedding-dimension 1024
-ksearch kb reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
-ksearch kb ingest ~/notes --source logseq
+kbase config --embedding-model mxbai-embed-large --embedding-dimension 1024
+kbase reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
+kbase ingest ~/notes --source logseq
 ```
 
 ## Docker Services
@@ -201,7 +201,7 @@ Default endpoints:
 Default config path:
 
 ```text
-~/.ksearch/config.json
+~/.kbase/config.json
 ```
 
 Example:
@@ -209,8 +209,8 @@ Example:
 ```json
 {
   "searxng_url": "http://localhost:48888",
-  "store_dir": "~/.ksearch/store",
-  "index_db": "~/.ksearch/index.db",
+  "store_dir": "~/.kbase/store",
+  "index_db": "~/.kbase/index.db",
   "max_results": 10,
   "timeout": 30,
   "format": "markdown",
@@ -218,9 +218,9 @@ Example:
   "no_cache": false,
   "only_cache": false,
   "verbose": false,
-  "kb_mode": "",
-  "kb_dir": "~/.ksearch/kb",
-  "kb_top_k": 5,
+  "kbase_mode": "",
+  "kbase_dir": "~/.kbase/kbase",
+  "kbase_top_k": 5,
   "qdrant_url": "http://localhost:6333",
   "embedding_model": "nomic-embed-text",
   "embedding_dimension": 768,
@@ -255,10 +255,10 @@ CLI args > config file > defaults
 - `--timeout`: request timeout in seconds
 - `--no-cache`: skip cache and force network
 - `--only-cache`: return cached results only
-- `--kb`: enable KB retrieval via `chroma`, `qdrant`, or `none`
-- `--embedding-model`: choose KB embedding model
-- `--embedding-dimension`: choose KB embedding dimension
-- `--iterative`: enable iterative KB-first search
+- `--kbase`: enable kbase retrieval via `chroma`, `qdrant`, or `none`
+- `--embedding-model`: choose kbase embedding model
+- `--embedding-dimension`: choose kbase embedding dimension
+- `--iterative`: enable iterative kbase-first search
 - `--verbose`, `-v`: print detailed execution info
 
 ## Testing
@@ -282,4 +282,4 @@ This script expects:
 - `nomic-embed-text:latest` available in Ollama
 - a negative-case non-embedding model, currently `fredrezones55/qwen3.5-opus:9b`
 
-It creates a temporary KB and fixture notes, runs English, Chinese, and mixed-keyword flows, validates `--only-cache` and `--iterative`, and writes a Markdown report.
+It creates a temporary kbase and fixture notes, runs English, Chinese, and mixed-keyword flows, validates `--only-cache` and `--iterative`, and writes a Markdown report.

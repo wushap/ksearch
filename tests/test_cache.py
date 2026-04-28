@@ -1,11 +1,11 @@
-"""Tests for kb.cache module."""
+"""Tests for kbase.cache module."""
 
 import tempfile
 import os
 import sqlite3
 
-from ksearch.cache import CacheManager
-from ksearch.models import CacheEntry
+from kbase.cache import CacheManager
+from kbase.models import CacheEntry
 
 
 def test_cache_manager_init():

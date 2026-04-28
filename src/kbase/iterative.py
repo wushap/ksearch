@@ -7,11 +7,11 @@ enforcement during iterative knowledge base search cycles.
 from dataclasses import dataclass
 from typing import Optional
 
-from ksearch.cache import CacheManager
-from ksearch.converter import ContentConverter
-from ksearch.kb import KnowledgeBase, KBSearchResult
-from ksearch.models import ResultEntry
-from ksearch.searxng import SearXNGClient
+from kbase.cache import CacheManager
+from kbase.converter import ContentConverter
+from kbase.kbase import KnowledgeBase, KnowledgeBaseSearchResult
+from kbase.models import ResultEntry
+from kbase.searxng import SearXNGClient
 
 
 @dataclass
@@ -54,8 +54,8 @@ class ConvergenceEvaluator:
 
     def check_convergence(
         self,
-        prev_results: Optional[list[KBSearchResult]],
-        current_results: list[KBSearchResult],
+        prev_results: Optional[list[KnowledgeBaseSearchResult]],
+        current_results: list[KnowledgeBaseSearchResult],
     ) -> ConvergenceResult:
         """Check if search has converged between iterations.
 
@@ -109,7 +109,7 @@ class ConvergenceEvaluator:
             factors_met=factors_met,
         )
 
-    def _average_score(self, results: list[KBSearchResult]) -> float:
+    def _average_score(self, results: list[KnowledgeBaseSearchResult]) -> float:
         """Calculate average similarity score."""
         if not results:
             return 0.0
@@ -117,8 +117,8 @@ class ConvergenceEvaluator:
 
     def _calculate_redundancy(
         self,
-        prev_results: list[KBSearchResult],
-        current_results: list[KBSearchResult],
+        prev_results: list[KnowledgeBaseSearchResult],
+        current_results: list[KnowledgeBaseSearchResult],
     ) -> float:
         """Calculate content redundancy ratio between iterations.
 
@@ -268,25 +268,25 @@ class SufficiencyEvaluator:
             self.count_weight /= total_weight
             self.coverage_weight /= total_weight
 
-    def score(self, kb_results: list[KBSearchResult]) -> float:
-        """Calculate sufficiency score for KB search results.
+    def score(self, kbase_results: list[KnowledgeBaseSearchResult]) -> float:
+        """Calculate sufficiency score for kbase search results.
 
         Args:
-            kb_results: List of KBSearchResult objects with score field
+            kbase_results: List of KnowledgeBaseSearchResult objects with score field
 
         Returns:
             Sufficiency score (0.0-1.0)
         """
-        if not kb_results:
+        if not kbase_results:
             return 0.0
 
         # Vector similarity component (average of scores)
-        similarity_scores = [r.score for r in kb_results]
+        similarity_scores = [r.score for r in kbase_results]
         avg_similarity = sum(similarity_scores) / len(similarity_scores)
         similarity_component = avg_similarity * self.vector_weight
 
         # Result count component (normalized)
-        count = len(kb_results)
+        count = len(kbase_results)
         if count >= self.MIN_RESULTS_FOR_MAX_SCORE:
             count_score = 1.0
         elif count <= self.MIN_RESULTS_FOR_MIN_SCORE:
@@ -300,7 +300,7 @@ class SufficiencyEvaluator:
         count_component = count_score * self.count_weight
 
         # Content coverage component (average content length normalized)
-        avg_content_length = sum(len(r.content) for r in kb_results) / len(kb_results)
+        avg_content_length = sum(len(r.content) for r in kbase_results) / len(kbase_results)
         # Normalize: 500 chars = full coverage
         coverage_score = min(avg_content_length / 500.0, 1.0)
         coverage_component = coverage_score * self.coverage_weight
@@ -333,18 +333,18 @@ class SufficiencyEvaluator:
         return score >= threshold
 
 class IterativeSearchEngine:
-    """Orchestrates iterative KB-first search with web fallback.
+    """Orchestrates iterative kbase-first search with web fallback.
 
     Implements the sufficiency-driven iteration loop:
     1. Classify query → determine threshold
-    2. KB search → evaluate sufficiency
+    2. kbase search → evaluate sufficiency
     3. If insufficient → web search + ingest
     4. Repeat until sufficient or boundaries reached
     """
 
     def __init__(
         self,
-        kb: KnowledgeBase,
+        kbase: KnowledgeBase,
         searxng_client: SearXNGClient,
         converter: ContentConverter,
         cache: CacheManager,
@@ -353,13 +353,13 @@ class IterativeSearchEngine:
         """Initialize the iterative search engine.
 
         Args:
-            kb: KnowledgeBase instance for KB search and ingestion
+            kbase: KnowledgeBase instance for kbase search and ingestion
             searxng_client: SearXNGClient for web search
             converter: ContentConverter for URL-to-markdown conversion
             cache: CacheManager for URL cache checking
             config: Configuration dict with max_iterations, max_time_seconds, etc.
         """
-        self.kb = kb
+        self.kbase = kbase
         self.searxng = searxng_client
         self.converter = converter
         self.cache = cache
@@ -380,36 +380,36 @@ class IterativeSearchEngine:
         )
 
     def search(self, query: str) -> list[ResultEntry]:
-        """Execute iterative KB-first search.
+        """Execute iterative kbase-first search.
 
         Args:
             query: Search query string
 
         Returns:
-            Combined results from KB and web searches as ResultEntry list
+            Combined results from kbase and web searches as ResultEntry list
         """
         import time
         start_time = time.time()
-        kb_top_k = self.config.get("kb_top_k", 10)
+        kbase_top_k = self.config.get("kbase_top_k", 10)
         max_results = self.config.get("max_results", 5)
 
         # 1. Classify query
         query_type = self.query_classifier.classify(query)
         threshold = self.sufficiency.get_threshold(query_type)
 
-        # 2. Initial KB search
-        kb_results = self.kb.search(query, top_k=kb_top_k)
+        # 2. Initial kbase search
+        kbase_results = self.kbase.search(query, top_k=kbase_top_k)
 
         # 3. Evaluate sufficiency
-        score = self.sufficiency.score(kb_results)
+        score = self.sufficiency.score(kbase_results)
 
-        # If KB sufficient, return early
+        # If kbase sufficient, return early
         if self.sufficiency.is_sufficient(score, threshold):
-            return self._convert_kb_results(kb_results)
+            return self._convert_kbase_results(kbase_results)
 
         # 4. Iteration loop
         iteration = 0
-        prev_results = kb_results
+        prev_results = kbase_results
         all_web_entries = []
         seen_web_urls = set()
 
@@ -439,7 +439,7 @@ class IterativeSearchEngine:
                     },
                 )
 
-                self.kb.ingest_file_from_content(
+                self.kbase.ingest_file_from_content(
                     content,
                     metadata={
                         "source": "web",
@@ -465,29 +465,29 @@ class IterativeSearchEngine:
                 break
 
             iteration += 1
-            current_results = self.kb.search(query, top_k=kb_top_k)
+            current_results = self.kbase.search(query, top_k=kbase_top_k)
             score = self.sufficiency.score(current_results)
             if self.sufficiency.is_sufficient(score, threshold):
-                kb_results = current_results
+                kbase_results = current_results
                 break
 
             # Check convergence
             convergence = self.convergence.check_convergence(prev_results, current_results)
             if convergence.is_converged:
-                kb_results = current_results
+                kbase_results = current_results
                 break
 
             prev_results = current_results
-            kb_results = current_results
+            kbase_results = current_results
 
         # 5. Return combined results
-        return self._combine_results(kb_results, all_web_entries)
+        return self._combine_results(kbase_results, all_web_entries)
 
-    def _convert_kb_results(self, kb_results: list[KBSearchResult]) -> list[ResultEntry]:
-        """Convert KBSearchResult to ResultEntry format."""
+    def _convert_kbase_results(self, kbase_results: list[KnowledgeBaseSearchResult]) -> list[ResultEntry]:
+        """Convert KnowledgeBaseSearchResult to ResultEntry format."""
         entries = []
         seen_paths = set()
-        for result in kb_results:
+        for result in kbase_results:
             if result.file_path in seen_paths:
                 continue
             seen_paths.add(result.file_path)
@@ -497,21 +497,21 @@ class IterativeSearchEngine:
                 content=result.content,
                 file_path=result.file_path,
                 cached=True,
-                source=result.source or "kb",
+                source=result.source or "kbase",
                 cached_date=result.metadata.get("created_at", "") if result.metadata else "",
             ))
         return entries
 
     def _combine_results(
         self,
-        kb_results: list[KBSearchResult],
+        kbase_results: list[KnowledgeBaseSearchResult],
         web_entries: list[ResultEntry],
     ) -> list[ResultEntry]:
-        """Combine KB and web results, deduplicating by URL/file_path."""
-        kb_entries = self._convert_kb_results(kb_results)
+        """Combine kbase and web results, deduplicating by URL/file_path."""
+        kbase_entries = self._convert_kbase_results(kbase_results)
 
-        # Deduplicate: prefer KB entries over web entries with same path
-        seen_paths = {e.file_path for e in kb_entries}
-        combined = kb_entries + [e for e in web_entries if e.file_path not in seen_paths]
+        # Deduplicate: prefer kbase entries over web entries with same path
+        seen_paths = {e.file_path for e in kbase_entries}
+        combined = kbase_entries + [e for e in web_entries if e.file_path not in seen_paths]
 
         return combined

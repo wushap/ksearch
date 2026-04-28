@@ -3,10 +3,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-from ksearch.cache import CacheManager
-from ksearch.searxng import SearXNGClient
-from ksearch.converter import ContentConverter
-from ksearch.models import ResultEntry, SearchResult
+from kbase.cache import CacheManager
+from kbase.searxng import SearXNGClient
+from kbase.converter import ContentConverter
+from kbase.models import ResultEntry, SearchResult
 
 
 # Known slow/problematic URLs to skip

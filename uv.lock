@@ -1760,7 +1760,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ksearch"
+name = "kbase"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
@@ -1798,9 +1798,9 @@ dev = [
 requires-dist = [
     { name = "chromadb", specifier = ">=0.4.0" },
     { name = "crawl4ai", marker = "extra == 'crawl4ai'", specifier = ">=0.3.0" },
-    { name = "ksearch", extras = ["crawl4ai"], marker = "extra == 'all'" },
-    { name = "ksearch", extras = ["ollama"], marker = "extra == 'all'" },
-    { name = "ksearch", extras = ["qdrant"], marker = "extra == 'all'" },
+    { name = "kbase", extras = ["crawl4ai"], marker = "extra == 'all'" },
+    { name = "kbase", extras = ["ollama"], marker = "extra == 'all'" },
+    { name = "kbase", extras = ["qdrant"], marker = "extra == 'all'" },
     { name = "markitdown", specifier = ">=0.0.1a2" },
     { name = "ollama", marker = "extra == 'ollama'", specifier = ">=0.1.0" },
     { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.7.0" },

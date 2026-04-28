@@ -1,4 +1,4 @@
-"""Configuration management for ksearch package."""
+"""Configuration management for kbase package."""
 
 import copy
 import json
@@ -7,19 +7,20 @@ import os
 
 DEFAULT_CONFIG = {
     "searxng_url": "http://localhost:48888",
-    "store_dir": "~/.ksearch/store",
-    "index_db": "~/.ksearch/index.db",
+    "store_dir": "~/.kbase/store",
+    "index_db": "~/.kbase/index.db",
     "max_results": 10,
     "timeout": 30,
     "format": "markdown",
     "time_range": "",
     "no_cache": False,
     "only_cache": False,
+    "only_kbase": False,
     "verbose": False,
     # Knowledge base settings
-    "kb_mode": "",  # "chroma", "qdrant", or "" (disabled)
-    "kb_dir": "~/.ksearch/kb",
-    "kb_top_k": 5,
+    "kbase_mode": "",  # "chroma", "qdrant", or "" (disabled)
+    "kbase_dir": "~/.kbase/kbase",
+    "kbase_top_k": 5,
     "qdrant_url": "http://localhost:6333",
     # Embedding settings
     "embedding_mode": "ollama",
@@ -33,6 +34,13 @@ DEFAULT_CONFIG = {
     "fact_threshold": 0.7,
     "exploration_threshold": 0.4,
     "scoring_weights": {"vector": 0.4, "count": 0.3, "coverage": 0.3},
+}
+
+LEGACY_KEY_ALIASES = {
+    "kb_mode": "kbase_mode",
+    "kb_dir": "kbase_dir",
+    "kb_top_k": "kbase_top_k",
+    "only_kb": "only_kbase",
 }
 
 
@@ -49,7 +57,7 @@ def init_default_config(config_path: str) -> None:
         json.dump(DEFAULT_CONFIG, f, indent=2)
 
 
-def load_config(config_path: str = "~/.ksearch/config.json") -> dict:
+def load_config(config_path: str = "~/.kbase/config.json") -> dict:
     """Load config from file, return defaults if file doesn't exist."""
     config_path = expand_path(config_path)
 
@@ -59,6 +67,9 @@ def load_config(config_path: str = "~/.ksearch/config.json") -> dict:
     try:
         with open(config_path) as f:
             file_config = json.load(f)
+        for legacy_key, current_key in LEGACY_KEY_ALIASES.items():
+            if legacy_key in file_config and current_key not in file_config:
+                file_config[current_key] = file_config[legacy_key]
         return file_config
     except json.JSONDecodeError:
         return copy.deepcopy(DEFAULT_CONFIG)
@@ -77,7 +88,7 @@ def merge_config(cli_args: dict, file_config: dict, defaults: dict) -> dict:
             result[key] = value
 
     # Expand paths after merging
-    for path_key in ["store_dir", "index_db", "kb_dir"]:
+    for path_key in ["store_dir", "index_db", "kbase_dir"]:
         if path_key in result:
             result[path_key] = expand_path(result[path_key])
 

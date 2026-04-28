@@ -1,14 +1,21 @@
-"""Tests for ksearch CLI entry points."""
+"""Tests for kbase CLI entry points."""
 
 import os
 import tempfile
 
 from typer.testing import CliRunner
 
-from ksearch.__main__ import app
+from kbase.__main__ import app
 
 
 runner = CliRunner()
+
+
+def test_app_help_uses_kbase_as_primary_name():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "kbase" in result.output
 
 
 def test_health_command_runs_without_name_error(monkeypatch):
@@ -29,7 +36,7 @@ def test_health_command_runs_without_name_error(monkeypatch):
     class FakeResponse:
         status_code = 200
 
-    monkeypatch.setattr("ksearch.__main__.EmbeddingGenerator", FakeEmbedder)
+    monkeypatch.setattr("kbase.__main__.EmbeddingGenerator", FakeEmbedder)
     monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
 
     result = runner.invoke(app, ["health"])
@@ -39,17 +46,17 @@ def test_health_command_runs_without_name_error(monkeypatch):
     assert "SearXNG" in result.output
 
 
-def test_search_command_accepts_kb_dir_for_only_cache_flow():
-    """Search CLI should allow pointing KB search at a non-default directory."""
+def test_search_command_accepts_kbase_dir_for_only_cache_flow():
+    """Search CLI should allow pointing kbase search at a non-default directory."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        kb_dir = os.path.join(tmpdir, "kb")
+        kbase_dir = os.path.join(tmpdir, "kbase")
         doc_path = os.path.join(tmpdir, "note.md")
         with open(doc_path, "w", encoding="utf-8") as handle:
-            handle.write("# KB Doc\n\nPython asyncio cancellation notes.")
+            handle.write("# kbase Doc\n\nPython asyncio cancellation notes.")
 
         ingest_result = runner.invoke(
             app,
-            ["kb", "ingest", doc_path, "--kb-dir", kb_dir, "--source", "test"],
+            ["ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
         )
         assert ingest_result.exit_code == 0
 
@@ -58,20 +65,42 @@ def test_search_command_accepts_kb_dir_for_only_cache_flow():
             [
                 "search",
                 "Python asyncio cancellation",
-                "--kb",
+                "--kbase",
                 "chroma",
-                "--kb-dir",
-                kb_dir,
+                "--kbase-dir",
+                kbase_dir,
                 "--only-cache",
             ],
         )
 
         assert result.exit_code == 0
-        assert "KB Doc" in result.output
+        assert "kbase Doc" in result.output
 
 
-def test_kb_reset_command_reinitializes_kb(monkeypatch):
-    """Reset command should build the KB with explicit embedding settings and clear it."""
+def test_query_command_searches_kbase_entries():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        kbase_dir = os.path.join(tmpdir, "kbase")
+        doc_path = os.path.join(tmpdir, "note.md")
+        with open(doc_path, "w", encoding="utf-8") as handle:
+            handle.write("# Asyncio Notes\n\nCancellation propagation reference.")
+
+        ingest_result = runner.invoke(
+            app,
+            ["ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
+        )
+        assert ingest_result.exit_code == 0
+
+        query_result = runner.invoke(
+            app,
+            ["query", "Cancellation propagation", "--kbase-dir", kbase_dir],
+        )
+
+        assert query_result.exit_code == 0
+        assert "Asyncio Notes" in query_result.output
+
+
+def test_kbase_reset_command_reinitializes_kbase(monkeypatch):
+    """Reset command should build the kbase with explicit embedding settings and clear it."""
 
     class FakeKB:
         last_init = None
@@ -83,18 +112,17 @@ def test_kb_reset_command_reinitializes_kb(monkeypatch):
         def reset(self):
             FakeKB.reset_called = True
 
-    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
+    monkeypatch.setattr("kbase.__main__.KnowledgeBase", FakeKB)
 
     result = runner.invoke(
         app,
         [
-            "kb",
             "reset",
             "--confirm",
             "--mode",
             "chroma",
-            "--kb-dir",
-            "/tmp/test-kb",
+            "--kbase-dir",
+            "/tmp/test-kbase",
             "--embedding-model",
             "mxbai-embed-large",
             "--embedding-dimension",
@@ -111,7 +139,7 @@ def test_kb_reset_command_reinitializes_kb(monkeypatch):
 
 
 def test_stats_command_prints_unified_sections(monkeypatch):
-    """Stats command should render overview, cache stats, and KB stats sections."""
+    """Stats command should render overview, cache stats, and kbase stats sections."""
 
     class FakeCache:
         def __init__(self, *args, **kwargs):
@@ -141,12 +169,12 @@ def test_stats_command_prints_unified_sections(monkeypatch):
                 "embedding_dimension": 768,
             }
 
-    monkeypatch.setattr("ksearch.__main__.CacheManager", FakeCache)
-    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
+    monkeypatch.setattr("kbase.__main__.CacheManager", FakeCache)
+    monkeypatch.setattr("kbase.__main__.KnowledgeBase", FakeKB)
 
     result = runner.invoke(app, ["stats"])
 
     assert result.exit_code == 0
     assert "Overview" in result.output
     assert "Cache Stats" in result.output
-    assert "Knowledge Base Stats" in result.output
+    assert "kbase stats" in result.output
