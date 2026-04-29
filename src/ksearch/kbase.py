@@ -253,9 +253,9 @@ class KnowledgeBase:
             vec = [v / norm for v in vec]
         return vec
 
-    def _generate_id(self, file_path: str, content: str) -> str:
+    def _generate_id(self, file_path: str, content: str, chunk_index: int) -> str:
         """Generate unique ID for entry."""
-        hash_input = f"{file_path}:{content[:100]}"
+        hash_input = f"{file_path}:{chunk_index}:{content[:100]}"
         return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
     def ingest_file(
@@ -296,7 +296,7 @@ class KnowledgeBase:
 
         entries = []
         for i, chunk in enumerate(chunks):
-            entry_id = self._generate_id(file_path, chunk)
+            entry_id = self._generate_id(file_path, chunk, i)
             entry = KnowledgeBaseEntry(
                 id=entry_id,
                 content=chunk,
@@ -647,7 +647,7 @@ class KnowledgeBase:
 
         entries = []
         for i, chunk in enumerate(chunks):
-            entry_id = self._generate_id(file_path, chunk)
+            entry_id = self._generate_id(file_path, chunk, i)
             entry = KnowledgeBaseEntry(
                 id=entry_id,
                 content=chunk,

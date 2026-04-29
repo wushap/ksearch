@@ -196,6 +196,15 @@ class TestKnowledgeBaseChunking:
         for chunk in chunks:
             assert len(chunk) <= 60  # Allow slight overflow for sentence boundary
 
+    def test_generate_id_includes_chunk_index(self, temp_kbase):
+        """Same file + same content should still get unique IDs per chunk index."""
+        chunk = "Repeated chunk content."
+
+        first_id = temp_kbase._generate_id("/tmp/repeated.md", chunk, 0)
+        second_id = temp_kbase._generate_id("/tmp/repeated.md", chunk, 1)
+
+        assert first_id != second_id
+
 
 class TestKnowledgeBaseMetadata:
     def test_init_writes_metadata_file(self):
