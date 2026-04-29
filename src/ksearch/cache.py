@@ -1,11 +1,9 @@
-"""Cache management with SQLite index, file storage, and keyword index files."""
+"""Cache management with SQLite index and Markdown file storage."""
 
 import hashlib
-import json
 import os
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlparse
 
 from ksearch.models import CacheEntry
@@ -41,15 +39,13 @@ def hash_url(url: str) -> str:
 
 
 class CacheManager:
-    """Manages SQLite index, file storage, and keyword index files for cached content."""
+    """Manages SQLite index and file storage for cached content."""
 
     def __init__(self, db_path: str, store_dir: str):
         self.db_path = db_path
         self.store_dir = store_dir
-        self.index_dir = os.path.join(store_dir, "_index")
 
         os.makedirs(store_dir, exist_ok=True)
-        os.makedirs(self.index_dir, exist_ok=True)
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
         self._init_db()
@@ -82,7 +78,7 @@ class CacheManager:
         keyword: str,
         metadata: dict,
     ) -> str:
-        """Save content to file and index in SQLite + keyword index file."""
+        """Save content to file and index in SQLite."""
         file_hash = hash_url(url)
         file_path = os.path.join(self.store_dir, f"{file_hash}.md")
 
@@ -110,53 +106,7 @@ class CacheManager:
             ))
             conn.commit()
 
-        # Update keyword index file
-        self._update_keyword_index(keyword, {
-            "url": url,
-            "file_hash": file_hash,
-            "title": metadata.get("title", ""),
-            "cached_date": cached_date.split()[0],  # YYYY-MM-DD only
-            "engine": metadata.get("engine", ""),
-        })
-
         return file_path
-
-    def _update_keyword_index(self, keyword: str, entry: dict) -> None:
-        """Update or create keyword index file."""
-        index_file = os.path.join(self.index_dir, f"{keyword}.json")
-
-        # Load existing index
-        if os.path.exists(index_file):
-            with open(index_file) as f:
-                data = json.load(f)
-        else:
-            data = {"keyword": keyword, "entries": []}
-
-        # Remove existing entry with same URL (update case)
-        data["entries"] = [e for e in data["entries"] if e["url"] != entry["url"]]
-
-        # Add new entry
-        data["entries"].append(entry)
-
-        # Save index
-        with open(index_file, "w") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
-    def _load_keyword_index(self, keyword: str) -> dict | None:
-        """Load keyword index file."""
-        index_file = os.path.join(self.index_dir, f"{keyword}.json")
-        if os.path.exists(index_file):
-            with open(index_file) as f:
-                return json.load(f)
-        return None
-
-    def _list_keyword_indices(self) -> list[str]:
-        """List all keyword index files."""
-        indices = []
-        for f in os.listdir(self.index_dir):
-            if f.endswith(".json"):
-                indices.append(f[:-5])  # Remove .json
-        return indices
 
     def exists(self, url: str) -> bool:
         """Check if URL is already cached."""
@@ -173,80 +123,44 @@ class CacheManager:
         return os.path.join(self.store_dir, f"{file_hash}.md")
 
     def exact_match(self, keyword: str) -> list[CacheEntry]:
-        """Find entries with exact keyword match using index file."""
-        index_data = self._load_keyword_index(keyword)
-        if not index_data:
-            return []
-
-        entries = []
-        for e in index_data["entries"]:
-            file_path = os.path.join(self.store_dir, f"{e['file_hash']}.md")
-            content = ""
-            if os.path.exists(file_path):
-                with open(file_path) as f:
-                    content = f.read()
-
-            entries.append(CacheEntry(
-                url=e["url"],
-                file_path=file_path,
-                title=e.get("title", ""),
-                keyword=keyword,
-                cached_date=e.get("cached_date", ""),
-                engine=e.get("engine", ""),
-                content=content,
-            ))
-        return entries
+        """Find entries with exact keyword match using SQLite."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """
+                SELECT url, file_path, title, keyword, cached_date, engine
+                FROM cache
+                WHERE keyword = ?
+                ORDER BY cached_date DESC, id DESC
+                """,
+                (keyword,),
+            )
+            return [self._load_entry_content(self._row_to_entry(row)) for row in cursor.fetchall()]
 
     def partial_match(
         self,
         keyword: str,
         time_range: str | None = None,
     ) -> list[CacheEntry]:
-        """Find entries with partial keyword match using index files."""
-        entries = []
+        """Find entries with partial keyword match using SQLite."""
+        sql = [
+            """
+            SELECT url, file_path, title, keyword, cached_date, engine
+            FROM cache
+            WHERE lower(keyword) LIKE ?
+            """
+        ]
+        params: list[str] = [f"%{keyword.lower()}%"]
 
-        # Find matching keyword indices
-        for kw in self._list_keyword_indices():
-            if keyword.lower() in kw.lower():
-                index_data = self._load_keyword_index(kw)
-                if index_data:
-                    for e in index_data["entries"]:
-                        file_path = os.path.join(self.store_dir, f"{e['file_hash']}.md")
+        if time_range and time_range in VALID_TIME_RANGES:
+            sql.append(f"AND datetime(cached_date) >= {TIME_RANGE_SQL[time_range]}")
 
-                        # Time range filter
-                        if time_range and time_range in VALID_TIME_RANGES:
-                            cached_date = e.get("cached_date", "")
-                            if cached_date:
-                                # Compare dates using SQLite syntax reference
-                                from datetime import datetime as dt
-                                try:
-                                    entry_date = dt.strptime(cached_date, "%Y-%m-%d")
-                                    threshold_map = {
-                                        "day": dt.now() - __import__("datetime").timedelta(days=1),
-                                        "week": dt.now() - __import__("datetime").timedelta(days=7),
-                                        "month": dt.now() - __import__("datetime").timedelta(days=30),
-                                        "year": dt.now() - __import__("datetime").timedelta(days=365),
-                                    }
-                                    if entry_date < threshold_map[time_range]:
-                                        continue
-                                except ValueError:
-                                    pass
+        sql.append("ORDER BY cached_date DESC, id DESC")
 
-                        content = ""
-                        if os.path.exists(file_path):
-                            with open(file_path) as f:
-                                content = f.read()
-
-                        entries.append(CacheEntry(
-                            url=e["url"],
-                            file_path=file_path,
-                            title=e.get("title", ""),
-                            keyword=kw,
-                            cached_date=e.get("cached_date", ""),
-                            engine=e.get("engine", ""),
-                            content=content,
-                        ))
-        return entries
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("\n".join(sql), params)
+            return [self._load_entry_content(self._row_to_entry(row)) for row in cursor.fetchall()]
 
     def _row_to_entry(self, row: sqlite3.Row) -> CacheEntry:
         """Convert SQLite row to CacheEntry."""
@@ -260,69 +174,39 @@ class CacheManager:
             content="",  # Loaded separately
         )
 
+    def _load_entry_content(self, entry: CacheEntry) -> CacheEntry:
+        """Populate cached Markdown content for an entry when available."""
+        if os.path.exists(entry.file_path):
+            with open(entry.file_path) as f:
+                entry.content = f.read()
+        return entry
+
     def cleanup_missing_files(self) -> int:
-        """Remove entries whose files are missing from SQLite and index files."""
+        """Remove entries whose files are missing from SQLite."""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("SELECT url, file_path, keyword FROM cache")
+            cursor = conn.execute("SELECT url, file_path FROM cache")
             missing_urls = []
 
             for row in cursor.fetchall():
                 if not os.path.exists(row["file_path"]):
-                    missing_urls.append((row["url"], row["keyword"]))
+                    missing_urls.append(row["url"])
 
             # Remove from SQLite
-            for url, _ in missing_urls:
+            for url in missing_urls:
                 conn.execute("DELETE FROM cache WHERE url = ?", (url,))
             conn.commit()
 
-        # Remove from index files
-        for url, keyword in missing_urls:
-            self._remove_from_index(keyword, url)
-
         return len(missing_urls)
 
-    def _remove_from_index(self, keyword: str, url: str) -> None:
-        """Remove URL from keyword index file."""
-        index_data = self._load_keyword_index(keyword)
-        if index_data:
-            index_data["entries"] = [e for e in index_data["entries"] if e["url"] != url]
-            index_file = os.path.join(self.index_dir, f"{keyword}.json")
-            with open(index_file, "w") as f:
-                json.dump(index_data, f, indent=2, ensure_ascii=False)
-
     def rebuild_index_from_db(self) -> int:
-        """Rebuild all keyword index files from SQLite database."""
-        keyword_entries: dict[str, list[dict]] = {}
+        """Compatibility shim after removing keyword index files.
 
+        Returns the number of distinct keywords tracked in SQLite.
+        """
         with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute("SELECT * FROM cache")
-
-            for row in cursor.fetchall():
-                kw = row["keyword"]
-                if kw not in keyword_entries:
-                    keyword_entries[kw] = []
-
-                cached_date = row["cached_date"] or ""
-                if cached_date:
-                    cached_date = cached_date.split()[0]  # YYYY-MM-DD only
-
-                keyword_entries[kw].append({
-                    "url": row["url"],
-                    "file_hash": row["file_hash"],
-                    "title": row["title"] or "",
-                    "cached_date": cached_date,
-                    "engine": row["engine"] or "",
-                })
-
-        # Write index files
-        for kw, entries in keyword_entries.items():
-            index_file = os.path.join(self.index_dir, f"{kw}.json")
-            with open(index_file, "w") as f:
-                json.dump({"keyword": kw, "entries": entries}, f, indent=2, ensure_ascii=False)
-
-        return len(keyword_entries)
+            cursor = conn.execute("SELECT COUNT(DISTINCT keyword) FROM cache")
+            return int(cursor.fetchone()[0] or 0)
 
     def stats(self) -> dict:
         """Summarize cache entry counts, size, keyword variety, and source distribution."""

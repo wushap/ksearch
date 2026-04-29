@@ -83,6 +83,40 @@ def test_cache_manager_partial_match():
         assert len(results) == 2
 
 
+def test_cache_manager_queries_work_without_keyword_index_files():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        store_dir = os.path.join(tmpdir, "store")
+
+        manager = CacheManager(db_path, store_dir)
+
+        manager.save(
+            url="https://example.com/a",
+            content="Content A",
+            keyword="python tutorial",
+            metadata={"title": "A", "engine": "google"},
+        )
+        manager.save(
+            url="https://example.com/b",
+            content="Content B",
+            keyword="rust tutorial",
+            metadata={"title": "B", "engine": "duckduckgo"},
+        )
+
+        index_dir = os.path.join(store_dir, "_index")
+        if os.path.exists(index_dir):
+            for filename in os.listdir(index_dir):
+                os.remove(os.path.join(index_dir, filename))
+            os.rmdir(index_dir)
+
+        exact = manager.exact_match("python tutorial")
+        partial = manager.partial_match("tutorial")
+
+        assert len(exact) == 1
+        assert exact[0].url == "https://example.com/a"
+        assert len(partial) == 2
+
+
 def test_cache_manager_no_match():
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "test.db")

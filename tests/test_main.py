@@ -36,7 +36,7 @@ def test_health_command_runs_without_name_error(monkeypatch):
     class FakeResponse:
         status_code = 200
 
-    monkeypatch.setattr("ksearch.__main__.EmbeddingGenerator", FakeEmbedder)
+    monkeypatch.setattr("ksearch.cli_system.EmbeddingGenerator", FakeEmbedder)
     monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
 
     result = runner.invoke(app, ["health"])
@@ -112,7 +112,7 @@ def test_kbase_reset_command_reinitializes_kbase(monkeypatch):
         def reset(self):
             FakeKB.reset_called = True
 
-    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
+    monkeypatch.setattr("ksearch.cli_kbase.KnowledgeBase", FakeKB)
 
     result = runner.invoke(
         app,
@@ -170,8 +170,8 @@ def test_stats_command_prints_unified_sections(monkeypatch):
                 "embedding_dimension": 768,
             }
 
-    monkeypatch.setattr("ksearch.__main__.CacheManager", FakeCache)
-    monkeypatch.setattr("ksearch.__main__.KnowledgeBase", FakeKB)
+    monkeypatch.setattr("ksearch.cli_system.CacheManager", FakeCache)
+    monkeypatch.setattr("ksearch.cli_system.KnowledgeBase", FakeKB)
 
     result = runner.invoke(app, ["stats"])
 

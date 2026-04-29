@@ -9,11 +9,11 @@ Usage:
     kbase = KnowledgeBase(mode="qdrant", url="http://localhost:6333")  # Server mode
 
     # Ingest documents
-    ksearch.ingest_file("~/docs/note.md", metadata={"source": "logseq"})
-    ksearch.ingest_directory("~/notes/", glob_pattern="*.md")
+    kbase.ingest_file("~/docs/note.md", metadata={"source": "logseq"})
+    kbase.ingest_directory("~/notes/", glob_pattern="*.md")
 
     # Search
-    results = ksearch.search("python async", top_k=5)
+    results = kbase.search("python async", top_k=5)
 """
 
 import hashlib
