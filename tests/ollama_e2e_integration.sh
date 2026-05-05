@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-PROJECT_DIR="/home/lan/workspace/test/search/inc"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 SEARXNG_URL="${SEARXNG_URL:-http://localhost:48888}"
 EMBED_MODEL="${EMBED_MODEL:-nomic-embed-text:latest}"
