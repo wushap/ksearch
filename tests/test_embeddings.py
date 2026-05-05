@@ -121,3 +121,17 @@ class TestGetEmbedder:
         assert embedder.mode == "ollama"
         assert embedder.model == "test-model"
         assert embedder.ollama_url == "http://localhost:99999"
+
+
+class TestKnowledgeEmbeddingFactory:
+    def test_build_kbase_embedding_function_matches_requested_dimension(self):
+        from ksearch.embeddings import build_kbase_embedding_function
+
+        embed = build_kbase_embedding_function(
+            embedding_model="nomic-embed-text",
+            embedding_dimension=128,
+            ollama_url="http://invalid-url:99999",
+        )
+
+        vector = embed("dimension compatible fallback")
+        assert len(vector) == 128

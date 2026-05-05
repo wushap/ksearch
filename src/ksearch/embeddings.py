@@ -110,17 +110,7 @@ class EmbeddingGenerator:
 
     def _embed_simple(self, text: str) -> list[float]:
         """Simple hash-based embedding for testing."""
-        words = text.lower().split()
-        vec = [0.0] * self.dimension
-        for word in words:
-            hash_val = int(hashlib.md5(word.encode()).hexdigest()[:8], 16)
-            idx = hash_val % self.dimension
-            vec[idx] += 1.0
-        # Normalize
-        norm = sum(v * v for v in vec) ** 0.5
-        if norm > 0:
-            vec = [v / norm for v in vec]
-        return vec
+        return simple_hash_embedding(text, self.dimension)
 
     def _fallback_embed(self, text: str) -> list[float]:
         """Fallback embedding when primary fails."""
@@ -177,3 +167,61 @@ def get_embedder(config: dict) -> EmbeddingGenerator:
         ollama_url=config.get("ollama_url", "http://localhost:11434"),
         dimension=config.get("embedding_dimension", 768),
     )
+
+
+def simple_hash_embedding(text: str, dimension: int) -> list[float]:
+    """Simple hash-based embedding."""
+    words = text.lower().split()
+    vec = [0.0] * dimension
+    for word in words:
+        hash_val = int(hashlib.md5(word.encode()).hexdigest()[:8], 16)
+        idx = hash_val % dimension
+        vec[idx] += 1.0
+
+    norm = sum(v * v for v in vec) ** 0.5
+    if norm > 0:
+        vec = [v / norm for v in vec]
+    return vec
+
+
+def build_kbase_embedding_function(
+    *,
+    embedding_model: str,
+    embedding_dimension: int,
+    ollama_url: str,
+):
+    """Build embedding function preserving KnowledgeBase fallback semantics."""
+
+    def embed(text: str) -> list[float]:
+        try:
+            import requests
+
+            response = requests.post(
+                f"{ollama_url}/api/embeddings",
+                json={"model": embedding_model, "prompt": text},
+                timeout=30,
+            )
+            if response.status_code == 200:
+                embedding = response.json()["embedding"]
+                if len(embedding) != embedding_dimension:
+                    raise ValueError(
+                        f"Embedding dimension mismatch for model '{embedding_model}': "
+                        f"expected {embedding_dimension}, got {len(embedding)}"
+                    )
+                return embedding
+        except Exception:
+            pass
+
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            embedding = model.encode(text).tolist()
+            if len(embedding) == embedding_dimension:
+                return embedding
+        except ImportError:
+            pass
+
+        return simple_hash_embedding(text, embedding_dimension)
+
+    return embed

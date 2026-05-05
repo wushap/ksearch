@@ -19,12 +19,13 @@ Usage:
 import hashlib
 import json
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from ksearch.config import expand_path
+from ksearch.embeddings import simple_hash_embedding
+from ksearch.knowledge.service import build_knowledge_service
 
 
 @dataclass
@@ -92,6 +93,7 @@ class KnowledgeBase:
         self.ollama_url = ollama_url
         self.collection_name = "kbase"
         self.metadata_path = os.path.join(self.persist_dir, "_kbase_metadata.json")
+        self.qdrant_url = qdrant_url
 
         os.makedirs(self.persist_dir, exist_ok=True)
 
@@ -109,42 +111,36 @@ class KnowledgeBase:
 
     def _init_chroma(self):
         """Initialize Chroma embedded mode."""
-        try:
-            import chromadb
-        except ImportError:
-            raise ImportError(
-                "chromadb not installed. Run: pip install chromadb"
-            )
-
-        self._client = chromadb.PersistentClient(path=self.persist_dir)
-        self._collection = self._client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"hnsw:space": "cosine"}
+        self._service, self._vector_store = build_knowledge_service(
+            mode="chroma",
+            persist_dir=self.persist_dir,
+            collection_name=self.collection_name,
+            embedding_model=self.embedding_model,
+            embedding_dimension=self.embedding_dimension,
+            ollama_url=self.ollama_url,
+            qdrant_url=None,
+            id_generator=self._generate_id,
+            entry_cls=KnowledgeBaseEntry,
+            result_cls=KnowledgeBaseSearchResult,
         )
+        self._client = self._vector_store.client
+        self._collection = self._vector_store.collection
 
     def _init_qdrant(self):
         """Initialize Qdrant server mode."""
-        try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Distance, VectorParams
-        except ImportError:
-            raise ImportError(
-                "qdrant-client not installed. Run: pip install qdrant-client"
-            )
-
-        self._client = QdrantClient(url=self.qdrant_url)
-
-        # Create collection if not exists
-        collections = self._client.get_collections().collections
-        collection_name = self.collection_name
-        if collection_name not in [c.name for c in collections]:
-            self._client.create_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(
-                    size=self.embedding_dimension,
-                    distance=Distance.Cosine
-                )
-            )
+        self._service, self._vector_store = build_knowledge_service(
+            mode="qdrant",
+            persist_dir=self.persist_dir,
+            collection_name=self.collection_name,
+            embedding_model=self.embedding_model,
+            embedding_dimension=self.embedding_dimension,
+            ollama_url=self.ollama_url,
+            qdrant_url=self.qdrant_url,
+            id_generator=self._generate_id,
+            entry_cls=KnowledgeBaseEntry,
+            result_cls=KnowledgeBaseSearchResult,
+        )
+        self._client = self._vector_store.client
 
     def _expected_metadata(self) -> dict:
         """Return metadata describing the current kbase embedding configuration."""
@@ -203,55 +199,14 @@ class KnowledgeBase:
 
     def _get_embedding(self, text: str) -> list[float]:
         """Get embedding vector from Ollama or fallback."""
-        # Try Ollama first
-        try:
-            import requests
-            response = requests.post(
-                f"{self.ollama_url}/api/embeddings",
-                json={"model": self.embedding_model, "prompt": text},
-                timeout=30
-            )
-            if response.status_code == 200:
-                embedding = response.json()["embedding"]
-                if len(embedding) != self.embedding_dimension:
-                    raise ValueError(
-                        f"Embedding dimension mismatch for model '{self.embedding_model}': "
-                        f"expected {self.embedding_dimension}, got {len(embedding)}"
-                    )
-                return embedding
-        except Exception:
-            pass  # Fallback to local
-
-        # Fallback: Use sentence-transformers if available
-        try:
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            embedding = model.encode(text).tolist()
-            if len(embedding) == self.embedding_dimension:
-                return embedding
-        except ImportError:
-            pass
-
-        # Last resort: Simple TF-IDF based hashing (not recommended)
-        # This provides very basic semantic matching
-        return self._simple_embedding(text)
+        return self._service.embed_text(text)
 
     def _simple_embedding(self, text: str) -> list[float]:
         """Simple embedding fallback when no ML models available.
 
         Uses word frequency hashing - NOT for production use.
         """
-        words = text.lower().split()
-        vec = [0.0] * self.embedding_dimension
-        for word in words:
-            hash_val = int(hashlib.md5(word.encode()).hexdigest()[:8], 16)
-            idx = hash_val % self.embedding_dimension
-            vec[idx] += 1.0
-        # Normalize
-        norm = sum(v * v for v in vec) ** 0.5
-        if norm > 0:
-            vec = [v / norm for v in vec]
-        return vec
+        return simple_hash_embedding(text, self.embedding_dimension)
 
     def _generate_id(self, file_path: str, content: str, chunk_index: int) -> str:
         """Generate unique ID for entry."""
@@ -276,43 +231,15 @@ class KnowledgeBase:
         Returns:
             Number of chunks ingested
         """
-        file_path = expand_path(file_path)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # Extract title from first line or filename
-        lines = content.split("\n")
-        title = None
-        if lines and lines[0].startswith("#"):
-            title = lines[0].lstrip("#").strip()
-        if not title:
-            title = Path(file_path).stem
-
-        # Chunk content
-        chunks = self._chunk_text(content, chunk_size, chunk_overlap)
-
-        entries = []
-        for i, chunk in enumerate(chunks):
-            entry_id = self._generate_id(file_path, chunk, i)
-            entry = KnowledgeBaseEntry(
-                id=entry_id,
-                content=chunk,
-                file_path=file_path,
-                title=title,
-                metadata={
-                    **(metadata or {}),
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                },
-            )
-            entries.append(entry)
-
-        # Store in vector DB
-        self._store_entries(entries)
-        return len(entries)
+        return self._service.ingest_file(
+            file_path=file_path,
+            metadata=metadata,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            chunker=self._chunk_text,
+            id_generator=self._generate_id,
+            entry_storer=self._store_entries,
+        )
 
     def ingest_directory(
         self,
@@ -332,29 +259,13 @@ class KnowledgeBase:
         Returns:
             Total chunks ingested
         """
-        directory = expand_path(directory)
-        if not os.path.isdir(directory):
-            raise NotADirectoryError(f"Not a directory: {directory}")
-
-        pattern = "**/" + glob_pattern if recursive else glob_pattern
-        files = list(Path(directory).glob(pattern))
-
-        total_chunks = 0
-        for file_path in files:
-            try:
-                chunks = self.ingest_file(
-                    str(file_path),
-                    metadata={
-                        **(metadata or {}),
-                        "directory": directory,
-                    }
-                )
-                total_chunks += chunks
-            except Exception as e:
-                # Log error but continue
-                print(f"Warning: Failed to ingest {file_path}: {e}")
-
-        return total_chunks
+        return self._service.ingest_directory(
+            directory=directory,
+            glob_pattern=glob_pattern,
+            metadata=metadata,
+            recursive=recursive,
+            ingest_file_fn=self.ingest_file,
+        )
 
     def _chunk_text(
         self,
@@ -363,82 +274,15 @@ class KnowledgeBase:
         chunk_overlap: int = 200,
     ) -> list[str]:
         """Split text into overlapping chunks."""
-        if len(text) <= chunk_size:
-            return [text]
-
-        chunks = []
-        start = 0
-        effective_overlap = min(chunk_overlap, max(chunk_size - 1, 0))
-        while start < len(text):
-            end = start + chunk_size
-            chunk = text[start:end]
-
-            # Try to break at sentence boundary
-            if end < len(text):
-                last_period = chunk.rfind(".")
-                last_newline = chunk.rfind("\n")
-                break_point = max(last_period, last_newline)
-                if break_point > chunk_size * 0.5:
-                    chunk = text[start:start + break_point + 1]
-                    end = start + break_point + 1
-
-            chunks.append(chunk.strip())
-            next_start = end - effective_overlap
-            if next_start <= start:
-                next_start = end
-            start = next_start
-
-        return [c for c in chunks if c]
+        return self._service.chunk_text(
+            text=text,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
 
     def _store_entries(self, entries: list[KnowledgeBaseEntry]):
         """Store entries in vector database."""
-        if not entries:
-            return
-
-        ids = [e.id for e in entries]
-        documents = [e.content for e in entries]
-        metadatas = []
-
-        for e in entries:
-            meta = asdict(e)
-            # Chroma doesn't like empty lists in metadata
-            # Filter out empty lists and None values
-            filtered_meta = {}
-            for k, v in meta.items():
-                if v is None:
-                    continue
-                if isinstance(v, list) and len(v) == 0:
-                    continue
-                if k == "metadata" and isinstance(v, dict):
-                    # Flatten nested metadata
-                    for mk, mv in v.items():
-                        if mv is not None and not (isinstance(mv, list) and len(mv) == 0):
-                            filtered_meta[mk] = mv
-                else:
-                    filtered_meta[k] = v
-            metadatas.append(filtered_meta)
-
-        # Get embeddings
-        embeddings = [self._get_embedding(d) for d in documents]
-
-        if self.mode == "chroma":
-            self._collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                documents=documents,
-                metadatas=metadatas,
-            )
-        elif self.mode == "qdrant":
-            from qdrant_client.models import PointStruct
-            points = [
-                PointStruct(
-                    id=int(e.id, 16) % (2**63),  # Convert to int
-                    vector=emb,
-                    payload=meta,
-                )
-                for e, emb, meta in zip(entries, embeddings, metadatas)
-            ]
-            self._client.upsert(collection_name=self.collection_name, points=points)
+        self._service.store_entries(entries, embedding_fn=self._get_embedding)
 
     def search(
         self,
@@ -458,122 +302,34 @@ class KnowledgeBase:
         Returns:
             List of KnowledgeBaseSearchResult
         """
-        embedding = self._get_embedding(query)
-
-        if self.mode == "chroma":
-            where = None
-            if filter_source:
-                where = {"source": filter_source}
-
-            results = self._collection.query(
-                query_embeddings=[embedding],
-                n_results=top_k,
-                where=where,
-            )
-
-            search_results = []
-            for i, doc in enumerate(results["documents"][0]):
-                meta = results["metadatas"][0][i]
-                distance = results["distances"][0][i]
-                score = 1.0 - distance  # Cosine similarity
-
-                search_results.append(KnowledgeBaseSearchResult(
-                    id=results["ids"][0][i],
-                    content=doc,
-                    file_path=meta.get("file_path", ""),
-                    title=meta.get("title"),
-                    source=meta.get("source"),
-                    score=score,
-                    metadata=meta,
-                ))
-            return search_results
-
-        elif self.mode == "qdrant":
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-
-            filter_obj = None
-            if filter_source:
-                filter_obj = Filter(
-                    must=[
-                        FieldCondition(
-                            key="source",
-                            value=MatchValue(value=filter_source)
-                        )
-                    ]
-                )
-
-            results = self._client.search(
-                collection_name=self.collection_name,
-                query_vector=embedding,
-                limit=top_k,
-                query_filter=filter_obj,
-            )
-
-            search_results = []
-            for hit in results:
-                search_results.append(KnowledgeBaseSearchResult(
-                    id=str(hit.id),
-                    content=hit.payload.get("content", ""),
-                    file_path=hit.payload.get("file_path", ""),
-                    title=hit.payload.get("title"),
-                    source=hit.payload.get("source"),
-                    score=hit.score,
-                    metadata=hit.payload,
-                ))
-            return search_results
+        return self._service.search(
+            query=query,
+            top_k=top_k,
+            filter_source=filter_source,
+            filter_tags=filter_tags,
+            embedding_fn=self._get_embedding,
+        )
 
     def delete_entry(self, entry_id: str):
         """Delete entry by ID."""
-        if self.mode == "chroma":
-            self._collection.delete(ids=[entry_id])
-        elif self.mode == "qdrant":
-            try:
-                int_id = int(entry_id, 16) % (2**63)
-                self._client.delete(collection_name=self.collection_name, points_selector=[int_id])
-            except ValueError:
-                pass
+        self._vector_store.delete_entry(entry_id)
 
     def delete_by_file(self, file_path: str):
         """Delete all entries from a specific file."""
         file_path = expand_path(file_path)
 
-        if self.mode == "chroma":
-            self._collection.delete(
-                where={"file_path": file_path}
-            )
-        elif self.mode == "qdrant":
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            self._client.delete(
-                collection_name=self.collection_name,
-                points_selector=Filter(
-                    must=[
-                        FieldCondition(
-                            key="file_path",
-                            value=MatchValue(value=file_path)
-                        )
-                    ]
-                )
-            )
+        self._vector_store.delete_by_file(file_path)
 
     def count(self) -> int:
         """Get total number of entries."""
-        if self.mode == "chroma":
-            return self._collection.count()
-        elif self.mode == "qdrant":
-            info = self._client.get_collection(collection_name=self.collection_name)
-            return info.points_count
+        return self._vector_store.count()
 
     def clear(self):
         """Clear all entries."""
+        self._vector_store.clear()
+        self._client = self._vector_store.client
         if self.mode == "chroma":
-            self._client.delete_collection(name=self.collection_name)
-            self._collection = self._client.create_collection(
-                name=self.collection_name,
-                metadata={"hnsw:space": "cosine"}
-            )
-        elif self.mode == "qdrant":
-            self._client.delete_collection(collection_name=self.collection_name)
-            self._init_qdrant()
+            self._collection = self._vector_store.collection
         self._write_metadata()
 
     def reset(self):
@@ -582,30 +338,7 @@ class KnowledgeBase:
 
     def list_sources(self) -> list[str]:
         """List all unique sources."""
-        if self.mode == "chroma":
-            # Chroma doesn't have built-in aggregation
-            results = self._collection.get()
-            sources = set()
-            for meta in results["metadatas"]:
-                if "source" in meta:
-                    sources.add(meta["source"])
-            return list(sources)
-        elif self.mode == "qdrant":
-            # Scroll through collection
-            sources = set()
-            offset = None
-            while True:
-                batch, offset = self._client.scroll(
-                    collection_name=self.collection_name,
-                    limit=100,
-                    offset=offset,
-                )
-                for point in batch:
-                    if "source" in point.payload:
-                        sources.add(point.payload["source"])
-                if offset is None:
-                    break
-            return list(sources)
+        return self._vector_store.list_sources()
 
     def ingest_file_from_content(
         self,
@@ -625,69 +358,19 @@ class KnowledgeBase:
         Returns:
             Number of chunks ingested
         """
-        if not content:
-            return 0
-
-        # Reuse persisted cache path when available; otherwise synthesize one.
-        source = metadata.get("source", "web") if metadata else "web"
-        url = metadata.get("url", "") if metadata else ""
-        title = metadata.get("title", "Untitled") if metadata else "Untitled"
-        provided_file_path = metadata.get("file_path") if metadata else None
-
-        # Use provided cache path when available, otherwise use URL or content hash.
-        if provided_file_path:
-            file_path = provided_file_path
-        elif url:
-            file_path = f"web:{url}"
-        else:
-            file_path = f"content:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
-
-        # Chunk content
-        chunks = self._chunk_text(content, chunk_size, chunk_overlap)
-
-        entries = []
-        for i, chunk in enumerate(chunks):
-            entry_id = self._generate_id(file_path, chunk, i)
-            entry = KnowledgeBaseEntry(
-                id=entry_id,
-                content=chunk,
-                file_path=file_path,
-                title=title,
-                source=source,
-                metadata={
-                    **(metadata or {}),
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                },
-            )
-            entries.append(entry)
-
-        # Store in vector DB
-        self._store_entries(entries)
-        return len(entries)
+        return self._service.ingest_content(
+            content=content,
+            metadata=metadata,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            chunker=self._chunk_text,
+            id_generator=self._generate_id,
+            entry_storer=self._store_entries,
+        )
 
     def stats(self) -> dict:
         """Summarize kbase entries, source files, content size, and source distribution."""
-        if self.mode == "chroma":
-            results = self._collection.get(include=["metadatas"])
-            metadatas = results.get("metadatas", [])
-        elif self.mode == "qdrant":
-            metadatas = []
-            offset = None
-            while True:
-                batch, offset = self._client.scroll(
-                    collection_name=self.collection_name,
-                    limit=100,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=False,
-                )
-                for point in batch:
-                    metadatas.append(point.payload or {})
-                if offset is None:
-                    break
-        else:
-            metadatas = []
+        metadatas = self._vector_store.all_metadatas()
 
         file_paths = set()
         sources: dict[str, int] = {}

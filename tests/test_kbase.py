@@ -205,6 +205,130 @@ class TestKnowledgeBaseChunking:
 
         assert first_id != second_id
 
+    def test_ingest_content_chunking_regression(self, temp_kbase):
+        """Ingestion should keep stable chunk boundaries and overlap behavior."""
+        captured_entries = []
+
+        def capture_store_entries(entries):
+            captured_entries.extend(entries)
+
+        temp_kbase._store_entries = capture_store_entries
+
+        ingested = temp_kbase.ingest_file_from_content(
+            content="abcd.efgh.ijkl",
+            metadata={"file_path": "/tmp/chunking-regression.md"},
+            chunk_size=6,
+            chunk_overlap=1,
+        )
+
+        assert ingested == 3
+        assert [entry.content for entry in captured_entries] == [
+            "abcd.",
+            ".efgh.",
+            ".ijkl",
+        ]
+
+
+class TestKnowledgeBaseServiceAssembly:
+    def test_kbase_exposes_knowledge_service_collaborator(self):
+        """KnowledgeBase should assemble a knowledge service collaborator."""
+        from ksearch.knowledge.service import KnowledgeService
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            assert isinstance(kbase._service, KnowledgeService)
+
+
+class TestKnowledgeBaseExtensionHooks:
+    def test_ingest_file_honors_chunk_store_and_id_hooks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as handle:
+                handle.write("# Hook Test\n\nOriginal content should be ignored by chunk hook.")
+                handle.flush()
+                file_path = handle.name
+
+            captured_entries = []
+
+            def fake_chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200):
+                del text, chunk_size, chunk_overlap
+                return ["first override chunk", "second override chunk"]
+
+            def fake_generate_id(path: str, content: str, chunk_index: int):
+                del path, content
+                return f"custom-{chunk_index}"
+
+            def fake_store_entries(entries):
+                captured_entries.extend(entries)
+
+            kbase._chunk_text = fake_chunk_text
+            kbase._generate_id = fake_generate_id
+            kbase._store_entries = fake_store_entries
+
+            ingested = kbase.ingest_file(file_path)
+
+            assert ingested == 2
+            assert [entry.id for entry in captured_entries] == ["custom-0", "custom-1"]
+            assert [entry.content for entry in captured_entries] == [
+                "first override chunk",
+                "second override chunk",
+            ]
+
+            os.unlink(file_path)
+
+    def test_ingest_directory_honors_ingest_file_override(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            notes_dir = os.path.join(tmpdir, "notes")
+            os.makedirs(notes_dir, exist_ok=True)
+
+            for idx in range(3):
+                path = os.path.join(notes_dir, f"note-{idx}.md")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(f"# {idx}\n\ncontent")
+
+            kbase = KnowledgeBase(mode="chroma", persist_dir=os.path.join(tmpdir, "kbase"))
+
+            calls = []
+
+            def fake_ingest_file(file_path: str, metadata: dict = None, chunk_size: int = 1000, chunk_overlap: int = 200):
+                del metadata, chunk_size, chunk_overlap
+                calls.append(file_path)
+                return 1
+
+            kbase.ingest_file = fake_ingest_file
+            ingested = kbase.ingest_directory(notes_dir)
+
+            assert ingested == 3
+            assert len(calls) == 3
+
+    def test_search_honors_get_embedding_hook(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+
+            def raising_embedding_hook(text: str):
+                raise RuntimeError(f"hooked embedding for {text}")
+
+            kbase._get_embedding = raising_embedding_hook
+
+            with pytest.raises(RuntimeError, match="hooked embedding"):
+                kbase.search("hooked query")
+
+    def test_ingest_content_honors_get_embedding_hook(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+
+            def raising_embedding_hook(text: str):
+                raise RuntimeError(f"hooked embedding for {text}")
+
+            kbase._get_embedding = raising_embedding_hook
+
+            with pytest.raises(RuntimeError, match="hooked embedding"):
+                kbase.ingest_file_from_content(
+                    content="Embedding hook should run during ingest.",
+                    metadata={"file_path": "/tmp/hooked-content.md"},
+                )
+
 
 class TestKnowledgeBaseMetadata:
     def test_init_writes_metadata_file(self):
