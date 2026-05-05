@@ -19,11 +19,13 @@ def test_app_help_uses_ksearch_as_primary_name():
 
 
 def test_health_command_runs_without_name_error(monkeypatch):
-    """Health command should complete even when services are unavailable."""
+    """Health command should complete via legacy patch points."""
 
     class FakeEmbedder:
+        created = False
+
         def __init__(self, *args, **kwargs):
-            pass
+            FakeEmbedder.created = True
 
         def health_check(self):
             return {
@@ -42,6 +44,7 @@ def test_health_command_runs_without_name_error(monkeypatch):
     result = runner.invoke(app, ["health"])
 
     assert result.exit_code == 0
+    assert FakeEmbedder.created is True
     assert "Service Health" in result.output
     assert "SearXNG" in result.output
 
@@ -100,7 +103,7 @@ def test_query_command_searches_kbase_entries():
 
 
 def test_kbase_reset_command_reinitializes_kbase(monkeypatch):
-    """Reset command should build the kbase with explicit embedding settings and clear it."""
+    """Reset command should honor legacy kbase patch points at runtime."""
 
     class FakeKB:
         last_init = None
@@ -140,11 +143,13 @@ def test_kbase_reset_command_reinitializes_kbase(monkeypatch):
 
 
 def test_stats_command_prints_unified_sections(monkeypatch):
-    """Stats command should render overview, cache stats, and kbase stats sections."""
+    """Stats command should honor legacy stats patch points at runtime."""
 
     class FakeCache:
+        created = False
+
         def __init__(self, *args, **kwargs):
-            pass
+            FakeCache.created = True
 
         def stats(self):
             return {
@@ -156,8 +161,10 @@ def test_stats_command_prints_unified_sections(monkeypatch):
             }
 
     class FakeKB:
+        created = False
+
         def __init__(self, **kwargs):
-            pass
+            FakeKB.created = True
 
         def stats(self):
             return {
@@ -176,6 +183,8 @@ def test_stats_command_prints_unified_sections(monkeypatch):
     result = runner.invoke(app, ["stats"])
 
     assert result.exit_code == 0
+    assert FakeCache.created is True
+    assert FakeKB.created is True
     assert "Overview" in result.output
     assert "Cache Stats" in result.output
     assert "kbase stats" in result.output
@@ -186,3 +195,25 @@ def test_cli_search_uses_compatibility_searchengine_export():
     from ksearch.cli_search import SearchEngine as SearchEngineFromCLI
 
     assert SearchEngineFromCLI is SearchEngineCompat
+
+
+def test_cli_package_is_importable():
+    from ksearch.cli.search import register_search_command
+
+    assert register_search_command is not None
+
+
+def test_cli_compat_modules_remain_importable_and_callable():
+    from ksearch.cli_kbase import register_kbase_commands
+    from ksearch.cli_search import register_search_command
+    from ksearch.cli_system import (
+        register_config_command,
+        register_health_command,
+        register_stats_command,
+    )
+
+    assert callable(register_search_command)
+    assert callable(register_kbase_commands)
+    assert callable(register_stats_command)
+    assert callable(register_config_command)
+    assert callable(register_health_command)

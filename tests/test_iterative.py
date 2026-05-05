@@ -23,6 +23,38 @@ def test_iterative_cache_manager_uses_layered_service_compatibility_export():
     assert CacheManager is LayeredCacheManager
 
 
+def test_iterative_flow_package_is_importable():
+    from ksearch.iterative_flow import IterativeSearchEngine
+
+    assert IterativeSearchEngine is not None
+
+
+def test_iterative_compat_modules_reexport_iterative_flow_symbols():
+    from ksearch.iterative_flow.convergence import (
+        ConvergenceEvaluator as ConvergenceEvaluatorNew,
+        ConvergenceResult as ConvergenceResultNew,
+        IterationBoundary as IterationBoundaryNew,
+    )
+    from ksearch.iterative_flow.engine import IterativeSearchEngine as IterativeSearchEngineNew
+    from ksearch.iterative_flow.query import QueryClassifier as QueryClassifierNew
+    from ksearch.iterative_flow.sufficiency import SufficiencyEvaluator as SufficiencyEvaluatorNew
+    from ksearch.iterative_convergence import (
+        ConvergenceEvaluator as ConvergenceEvaluatorCompat,
+        ConvergenceResult as ConvergenceResultCompat,
+        IterationBoundary as IterationBoundaryCompat,
+    )
+    from ksearch.iterative_engine import IterativeSearchEngine as IterativeSearchEngineCompat
+    from ksearch.iterative_query import QueryClassifier as QueryClassifierCompat
+    from ksearch.iterative_sufficiency import SufficiencyEvaluator as SufficiencyEvaluatorCompat
+
+    assert QueryClassifierCompat is QueryClassifierNew
+    assert SufficiencyEvaluatorCompat is SufficiencyEvaluatorNew
+    assert ConvergenceEvaluatorCompat is ConvergenceEvaluatorNew
+    assert ConvergenceResultCompat is ConvergenceResultNew
+    assert IterationBoundaryCompat is IterationBoundaryNew
+    assert IterativeSearchEngineCompat is IterativeSearchEngineNew
+
+
 class TestConvergenceEvaluator:
     """Tests for ConvergenceEvaluator class."""
 
