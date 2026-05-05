@@ -179,3 +179,10 @@ def test_stats_command_prints_unified_sections(monkeypatch):
     assert "Overview" in result.output
     assert "Cache Stats" in result.output
     assert "kbase stats" in result.output
+
+
+def test_cli_search_uses_compatibility_searchengine_export():
+    from ksearch.search import SearchEngine as SearchEngineCompat
+    from ksearch.cli_search import SearchEngine as SearchEngineFromCLI
+
+    assert SearchEngineFromCLI is SearchEngineCompat

@@ -8,7 +8,7 @@ from ksearch.config import DEFAULT_CONFIG, load_config, merge_config
 from ksearch.converter import ContentConverter
 from ksearch.iterative import IterativeSearchEngine
 from ksearch.output import format_markdown, format_paths
-from ksearch.search import SearchEngine
+from ksearch.searching import SearchEngine
 from ksearch.searxng import SearXNGClient
 from ksearch.cli_common import build_kbase, console, kbase_results_to_entries
 

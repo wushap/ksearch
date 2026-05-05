@@ -147,3 +147,11 @@ def test_search_engine_skips_known_slow_urls():
         converter.convert_url.assert_called_once_with("https://example.com/article")
         assert len(results) == 1
         assert results[0].url == "https://example.com/article"
+
+
+def test_search_engine_compatibility_export_points_to_searching_service():
+    from ksearch.searching import SearchEngine as SearchEngineFromSearching
+    from ksearch.searching.service import SearchEngine as SearchEngineFromService
+
+    assert SearchEngine is SearchEngineFromSearching
+    assert SearchEngine is SearchEngineFromService
