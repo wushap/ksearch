@@ -5,12 +5,17 @@ from unittest.mock import Mock, patch
 
 from ksearch.searxng import SearXNGClient
 from ksearch.models import SearchResult
+from ksearch.web.search_client import SearXNGClient as WebSearXNGClient
 
 
 def test_searxng_client_init():
     client = SearXNGClient("http://localhost:48888", timeout=30)
     assert client.base_url == "http://localhost:48888"
     assert client.timeout == 30
+
+
+def test_searxng_client_compatibility_alias():
+    assert SearXNGClient is WebSearXNGClient
 
 
 def test_searxng_client_search_success():

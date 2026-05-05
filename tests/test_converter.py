@@ -3,6 +3,8 @@
 from unittest.mock import Mock, patch
 
 from ksearch.converter import ContentConverter, clean_content
+from ksearch.web.extractor import ContentConverter as WebContentConverter
+from ksearch.web.url_policy import should_skip_url
 
 
 def test_content_converter_init():
@@ -10,12 +12,24 @@ def test_content_converter_init():
     assert converter.timeout == 30
 
 
+def test_content_converter_compatibility_alias():
+    """Public converter API should remain an alias to the web extractor class."""
+    assert ContentConverter is WebContentConverter
+
+
+def test_should_skip_url_known_problematic_urls():
+    assert should_skip_url("https://www.youtube.com/watch?v=abc123")
+    assert should_skip_url("https://youtu.be/abc123")
+    assert should_skip_url("https://sputniknews.cn/20240101/example.html")
+    assert not should_skip_url("https://example.com/article")
+
+
 def test_content_converter_convert_url_success():
     mock_result = Mock()
     # Use longer content to pass minimum length check (50 chars)
     mock_result.text_content = "# Converted Content\n\nThis is markdown content that should be preserved after cleaning."
 
-    with patch("ksearch.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
@@ -27,7 +41,7 @@ def test_content_converter_convert_url_success():
 
 
 def test_content_converter_convert_url_failure():
-    with patch("ksearch.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.side_effect = Exception("Conversion failed")
         mock_md_class.return_value = mock_md
@@ -60,7 +74,7 @@ def test_converter_returns_empty_for_short_content():
     mock_result = Mock()
     mock_result.text_content = "Redirecting to </>..."  # Only 21 chars
 
-    with patch("ksearch.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
@@ -81,7 +95,7 @@ def test_converter_returns_empty_when_cleaned_content_drops_below_threshold():
         "Short body.\n"
     )
 
-    with patch("ksearch.converter.MarkItDown") as mock_md_class:
+    with patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
@@ -98,10 +112,10 @@ def test_convert_url_prefers_main_content_extraction():
     response.text = "<html><body><article><h1>Title</h1><p>Main content only.</p></article></body></html>"
     response.raise_for_status = Mock()
 
-    with patch("ksearch.converter.requests.get", return_value=response), patch(
-        "ksearch.converter.trafilatura_extract",
+    with patch("ksearch.web.extractor.requests.get", return_value=response), patch(
+        "ksearch.web.extractor.trafilatura_extract",
         return_value="# Title\n\nMain content only with enough detail to pass the length threshold.",
-    ), patch("ksearch.converter.MarkItDown") as mock_md_class:
+    ), patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md_class.return_value = mock_md
 
@@ -121,10 +135,10 @@ def test_convert_url_falls_back_to_markitdown_when_extraction_unavailable():
     mock_result = Mock()
     mock_result.text_content = "# Converted Content\n\nThis is markdown content that should be preserved after cleaning."
 
-    with patch("ksearch.converter.requests.get", return_value=response), patch(
-        "ksearch.converter.trafilatura_extract",
+    with patch("ksearch.web.extractor.requests.get", return_value=response), patch(
+        "ksearch.web.extractor.trafilatura_extract",
         return_value="too short",
-    ), patch("ksearch.converter.MarkItDown") as mock_md_class:
+    ), patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
         mock_md = Mock()
         mock_md.convert.return_value = mock_result
         mock_md_class.return_value = mock_md
