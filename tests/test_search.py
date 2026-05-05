@@ -112,3 +112,38 @@ def test_search_engine_only_cache_flag():
         # only_cache should not trigger network search
         searxng.search.assert_not_called()
         assert len(results) == 0
+
+
+def test_search_engine_skips_known_slow_urls():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        store_dir = os.path.join(tmpdir, "store")
+
+        cache = CacheManager(db_path, store_dir)
+        searxng = Mock(spec=SearXNGClient)
+        searxng.search.return_value = [
+            SearchResult(
+                url="https://youtube.com/watch?v=abc",
+                title="Video",
+                content="",
+                engine="duckduckgo",
+                published_date="",
+            ),
+            SearchResult(
+                url="https://example.com/article",
+                title="Article",
+                content="",
+                engine="duckduckgo",
+                published_date="",
+            ),
+        ]
+
+        converter = Mock(spec=ContentConverter)
+        converter.convert_url.return_value = "Converted content that is long enough."
+
+        engine = SearchEngine(cache, searxng, converter)
+        results = engine.search("python", {"no_cache": True, "only_cache": False, "max_results": 10})
+
+        converter.convert_url.assert_called_once_with("https://example.com/article")
+        assert len(results) == 1
+        assert results[0].url == "https://example.com/article"

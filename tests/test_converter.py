@@ -71,6 +71,27 @@ def test_converter_returns_empty_for_short_content():
         assert result == ""
 
 
+def test_converter_returns_empty_when_cleaned_content_drops_below_threshold():
+    """Compatibility guard: short cleaned content should be treated as empty."""
+    mock_result = Mock()
+    mock_result.text_content = (
+        "# Title\n\n"
+        "[Menu](/menu)\n"
+        "[Home](/)\n"
+        "Short body.\n"
+    )
+
+    with patch("ksearch.converter.MarkItDown") as mock_md_class:
+        mock_md = Mock()
+        mock_md.convert.return_value = mock_result
+        mock_md_class.return_value = mock_md
+
+        converter = ContentConverter()
+        result = converter.convert_url("https://example.com/noisy-short")
+
+        assert result == ""
+
+
 def test_convert_url_prefers_main_content_extraction():
     """Prefer extracted article body over raw full-page conversion when available."""
     response = Mock()

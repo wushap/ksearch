@@ -303,3 +303,26 @@ class TestKnowledgeBaseStats:
             assert stats["total_size_bytes"] > 0
             assert stats["sources"]["manual"] == 1
             assert stats["sources"]["web"] == 1
+
+
+class TestKnowledgeBaseContentIngest:
+    def test_ingest_file_from_content_prefers_provided_file_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            provided_file_path = "/tmp/cache/abc123.md"
+
+            ingested = kbase.ingest_file_from_content(
+                content="# Note\n\nSome compatible content for ingestion.",
+                metadata={
+                    "source": "web",
+                    "url": "https://example.com/should-not-win",
+                    "title": "Provided Path",
+                    "file_path": provided_file_path,
+                },
+            )
+
+            assert ingested > 0
+
+            results = kbase.search("compatible content", top_k=3)
+            assert len(results) > 0
+            assert any(r.file_path == provided_file_path for r in results)

@@ -3,6 +3,7 @@
 import tempfile
 import os
 import sqlite3
+import hashlib
 
 from ksearch.cache import CacheManager
 from ksearch.models import CacheEntry
@@ -167,6 +168,35 @@ def test_cache_manager_get_file_path():
 
         assert file_path.endswith(".md")
         assert store_dir in file_path
+
+
+def test_cache_manager_save_uses_url_hash_filename():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        store_dir = os.path.join(tmpdir, "store")
+
+        manager = CacheManager(db_path, store_dir)
+        url = "https://example.com/path?a=1&b=2"
+
+        file_path = manager.save(
+            url=url,
+            content="content",
+            keyword="hashing",
+            metadata={"title": "Hash Test", "engine": "google"},
+        )
+
+        expected_hash = hashlib.sha256(url.encode()).hexdigest()
+        assert os.path.basename(file_path) == f"{expected_hash}.md"
+
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT file_hash, file_path FROM cache WHERE url = ?",
+                (url,),
+            ).fetchone()
+
+        assert row is not None
+        assert row[0] == expected_hash
+        assert row[1] == file_path
 
 
 def test_cache_manager_stats():
