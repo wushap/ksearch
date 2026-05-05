@@ -12,8 +12,15 @@ from ksearch.iterative import (
     SufficiencyEvaluator,
     IterativeSearchEngine,
 )
+from ksearch.cache import CacheManager
 from ksearch.kbase import KnowledgeBaseSearchResult
 from ksearch.models import ResultEntry
+
+
+def test_iterative_cache_manager_uses_layered_service_compatibility_export():
+    from ksearch.cache_layer.service import CacheManager as LayeredCacheManager
+
+    assert CacheManager is LayeredCacheManager
 
 
 class TestConvergenceEvaluator:

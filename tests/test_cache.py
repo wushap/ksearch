@@ -9,6 +9,12 @@ from ksearch.cache import CacheManager
 from ksearch.models import CacheEntry
 
 
+def test_cache_layer_service_module_exists_and_matches_public_cache_manager():
+    from ksearch.cache_layer.service import CacheManager as LayeredCacheManager
+
+    assert CacheManager is LayeredCacheManager
+
+
 def test_cache_manager_init():
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "test.db")
@@ -265,3 +271,22 @@ def test_cache_manager_stats_normalizes_engine_names():
         assert stats["engines"]["startpage"] == 2
         assert stats["engines"]["brave"] == 2
         assert stats["engines"]["unknown"] == 1
+
+
+def test_cache_manager_exact_match_loads_content_from_store_layer():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        store_dir = os.path.join(tmpdir, "store")
+
+        manager = CacheManager(db_path, store_dir)
+        manager.save(
+            url="https://example.com/article",
+            content="# Article",
+            keyword="python",
+            metadata={"title": "Example", "engine": "web"},
+        )
+
+        results = manager.exact_match("python")
+
+        assert len(results) == 1
+        assert results[0].content == "# Article"
