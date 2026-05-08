@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from ksearch.knowledge.bm25_index import BM25Index
+
 
 class KnowledgeVectorStore:
     """Compatibility wrapper over Chroma and Qdrant operations."""
@@ -24,7 +26,9 @@ class KnowledgeVectorStore:
         self.qdrant_url = qdrant_url
         self.client = None
         self.collection = None
+        self.bm25 = BM25Index()
         self._init_store()
+        self._build_bm25_index()
 
     def _init_store(self) -> None:
         if self.mode == "chroma":
@@ -33,6 +37,24 @@ class KnowledgeVectorStore:
             self._init_qdrant()
         else:
             raise ValueError(f"Unknown mode: {self.mode}. Use 'chroma' or 'qdrant'")
+
+    def _build_bm25_index(self) -> None:
+        """Build BM25 index from all stored documents."""
+        metadatas = self.all_metadatas()
+        if not metadatas:
+            self.bm25.clear()
+            return
+        ids = []
+        documents = []
+        filtered_metas = []
+        for i, meta in enumerate(metadatas):
+            content = meta.get("content", "")
+            doc_id = meta.get("id", str(i))
+            if content:
+                ids.append(doc_id)
+                documents.append(content)
+                filtered_metas.append(meta)
+        self.bm25.build(ids, documents, filtered_metas)
 
     def _init_chroma(self) -> None:
         try:
@@ -79,6 +101,7 @@ class KnowledgeVectorStore:
                 documents=documents,
                 metadatas=metadatas,
             )
+            self._rebuild_bm25()
             return
 
         from qdrant_client.models import PointStruct
@@ -92,6 +115,8 @@ class KnowledgeVectorStore:
             for entry_id, embedding, metadata in zip(ids, embeddings, metadatas)
         ]
         self.client.upsert(collection_name=self.collection_name, points=points)
+
+        self._rebuild_bm25()
 
     def query(
         self,
@@ -130,9 +155,14 @@ class KnowledgeVectorStore:
             query_filter=filter_obj,
         )
 
+    def _rebuild_bm25(self) -> None:
+        """Rebuild BM25 index from current stored documents."""
+        self._build_bm25_index()
+
     def delete_entry(self, entry_id: str) -> None:
         if self.mode == "chroma":
             self.collection.delete(ids=[entry_id])
+            self._rebuild_bm25()
             return
 
         try:
@@ -140,10 +170,12 @@ class KnowledgeVectorStore:
             self.client.delete(collection_name=self.collection_name, points_selector=[int_id])
         except ValueError:
             pass
+        self._rebuild_bm25()
 
     def delete_by_file(self, file_path: str) -> None:
         if self.mode == "chroma":
             self.collection.delete(where={"file_path": file_path})
+            self._rebuild_bm25()
             return
 
         from qdrant_client.models import FieldCondition, Filter, MatchValue
@@ -159,6 +191,7 @@ class KnowledgeVectorStore:
                 ]
             ),
         )
+        self._rebuild_bm25()
 
     def count(self) -> int:
         if self.mode == "chroma":
@@ -173,10 +206,12 @@ class KnowledgeVectorStore:
                 name=self.collection_name,
                 metadata={"hnsw:space": "cosine"},
             )
+            self.bm25.clear()
             return
 
         self.client.delete_collection(collection_name=self.collection_name)
         self._init_qdrant()
+        self.bm25.clear()
 
     def list_sources(self) -> list[str]:
         if self.mode == "chroma":
@@ -222,3 +257,110 @@ class KnowledgeVectorStore:
             if offset is None:
                 break
         return metadatas
+
+    def hybrid_query(
+        self,
+        *,
+        query: str,
+        embedding: list[float],
+        top_k: int,
+        bm25_top_k: int = 20,
+        vector_top_k: int = 20,
+        rrf_k: int = 60,
+        filter_source: Optional[str] = None,
+    ) -> list[dict]:
+        """Run BM25 + vector search, merge with RRF, return *top_k* results.
+
+        Returns a list of dicts with keys: ``id``, ``content``, ``score``,
+        ``file_path``, ``title``, ``source``, ``metadata``.
+        Each dict also carries the original ``bm25_score`` and ``vector_score``
+        for downstream inspection.
+        """
+        # 1. BM25 retrieval
+        bm25_hits = self.bm25.query(query, top_k=bm25_top_k)
+
+        # 2. Vector retrieval
+        vector_raw = self.query(
+            embedding=embedding, top_k=vector_top_k, filter_source=filter_source
+        )
+        vector_hits = self._normalize_vector_results(vector_raw)
+
+        # 3. RRF merge
+        scores: dict[str, float] = {}
+        doc_map: dict[str, dict] = {}
+
+        for rank, hit in enumerate(bm25_hits):
+            scores[hit.id] = scores.get(hit.id, 0.0) + 1.0 / (rrf_k + rank + 1)
+            if hit.id not in doc_map:
+                doc_map[hit.id] = {
+                    "id": hit.id,
+                    "content": hit.content,
+                    "score": 0.0,
+                    "file_path": hit.metadata.get("file_path", ""),
+                    "title": hit.metadata.get("title"),
+                    "source": hit.metadata.get("source"),
+                    "metadata": hit.metadata,
+                    "bm25_score": hit.score,
+                    "vector_score": 0.0,
+                }
+
+        for rank, hit in enumerate(vector_hits):
+            doc_id = hit["id"]
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (rrf_k + rank + 1)
+            if doc_id not in doc_map:
+                doc_map[doc_id] = {
+                    "id": hit["id"],
+                    "content": hit.get("content", ""),
+                    "score": 0.0,
+                    "file_path": hit.get("file_path", ""),
+                    "title": hit.get("title"),
+                    "source": hit.get("source"),
+                    "metadata": hit.get("metadata", {}),
+                    "bm25_score": 0.0,
+                    "vector_score": hit.get("score", 0.0),
+                }
+            else:
+                doc_map[doc_id]["vector_score"] = hit.get("score", 0.0)
+
+        # 4. Sort by RRF score, take top_k
+        for doc_id, rrf_score in scores.items():
+            doc_map[doc_id]["score"] = rrf_score
+
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        return [doc_map[doc_id] for doc_id, _ in ranked]
+
+    def _normalize_vector_results(self, raw_results) -> list[dict]:
+        """Convert backend-specific vector results into a uniform dict list."""
+        if self.mode == "chroma":
+            if not raw_results or not raw_results.get("ids") or not raw_results["ids"][0]:
+                return []
+            results = []
+            for i, doc_id in enumerate(raw_results["ids"][0]):
+                meta = raw_results["metadatas"][0][i] if raw_results.get("metadatas") else {}
+                distance = raw_results["distances"][0][i] if raw_results.get("distances") else 0.0
+                results.append({
+                    "id": doc_id,
+                    "content": raw_results["documents"][0][i] if raw_results.get("documents") else "",
+                    "score": 1.0 - distance,
+                    "file_path": meta.get("file_path", ""),
+                    "title": meta.get("title"),
+                    "source": meta.get("source"),
+                    "metadata": meta,
+                })
+            return results
+
+        # Qdrant
+        results = []
+        for hit in (raw_results or []):
+            payload = hit.payload or {}
+            doc_id = payload.get("id", str(hit.id))
+            results.append({
+                "id": doc_id,
+                "content": payload.get("content", ""),
+                "score": hit.score,
+                "file_path": payload.get("file_path", ""),
+                "title": payload.get("title"),
+                "source": payload.get("source"),
+                "metadata": payload,
+            })
+        return results

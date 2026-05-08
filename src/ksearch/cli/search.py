@@ -35,6 +35,8 @@ def register_search_command(app: typer.Typer) -> None:
         embedding_dimension: int = typer.Option(None, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option(None, "--ollama-url", help="Ollama URL"),
         iterative: bool = typer.Option(False, "--iterative", help="Enable iterative kbase-first search"),
+        hybrid: bool = typer.Option(True, "--hybrid/--no-hybrid", help="Enable hybrid BM25+vector search"),
+        rerank: bool = typer.Option(True, "--rerank/--no-rerank", help="Enable cross-encoder re-ranking"),
         verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     ):
         """Search for keyword in cache, kbase, and/or network."""
@@ -45,6 +47,8 @@ def register_search_command(app: typer.Typer) -> None:
             "only_cache": only_cache,
             "verbose": verbose,
             "iterative_enabled": iterative,
+            "hybrid_search": hybrid,
+            "rerank_enabled": rerank,
         }
         optional_values = {
             "format": output_format,

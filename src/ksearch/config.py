@@ -34,6 +34,13 @@ DEFAULT_CONFIG = {
     "fact_threshold": 0.7,
     "exploration_threshold": 0.4,
     "scoring_weights": {"vector": 0.4, "count": 0.3, "coverage": 0.3},
+    # Hybrid search settings
+    "hybrid_search": True,
+    "rerank_enabled": True,
+    "rerank_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "bm25_top_k": 20,
+    "vector_top_k": 20,
+    "rrf_k": 60,
 }
 
 LEGACY_KEY_ALIASES = {

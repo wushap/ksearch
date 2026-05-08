@@ -75,6 +75,9 @@ class KnowledgeBase:
         embedding_model: str = "nomic-embed-text",
         embedding_dimension: int = 768,
         ollama_url: str = "http://localhost:11434",
+        reranker=None,
+        use_hybrid: bool = True,
+        use_rerank: bool = True,
     ):
         """Initialize knowledge base.
 
@@ -85,6 +88,9 @@ class KnowledgeBase:
             embedding_model: Ollama embedding model name
             embedding_dimension: Expected embedding vector size
             ollama_url: Ollama server URL for embeddings
+            reranker: Optional ReRanker instance for cross-encoder re-ranking
+            use_hybrid: Enable BM25 + vector hybrid retrieval
+            use_rerank: Enable cross-encoder re-ranking
         """
         self.mode = mode
         self.persist_dir = expand_path(persist_dir)
@@ -94,6 +100,9 @@ class KnowledgeBase:
         self.collection_name = "kbase"
         self.metadata_path = os.path.join(self.persist_dir, "_kbase_metadata.json")
         self.qdrant_url = qdrant_url
+        self.reranker = reranker
+        self.use_hybrid = use_hybrid
+        self.use_rerank = use_rerank
 
         os.makedirs(self.persist_dir, exist_ok=True)
 
@@ -122,6 +131,9 @@ class KnowledgeBase:
             id_generator=self._generate_id,
             entry_cls=KnowledgeBaseEntry,
             result_cls=KnowledgeBaseSearchResult,
+            reranker=self.reranker,
+            use_hybrid=self.use_hybrid,
+            use_rerank=self.use_rerank,
         )
         self._client = self._vector_store.client
         self._collection = self._vector_store.collection
@@ -139,6 +151,9 @@ class KnowledgeBase:
             id_generator=self._generate_id,
             entry_cls=KnowledgeBaseEntry,
             result_cls=KnowledgeBaseSearchResult,
+            reranker=self.reranker,
+            use_hybrid=self.use_hybrid,
+            use_rerank=self.use_rerank,
         )
         self._client = self._vector_store.client
 

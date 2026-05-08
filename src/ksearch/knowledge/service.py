@@ -25,6 +25,9 @@ class KnowledgeService:
         id_generator: Callable[[str, str, int], str],
         entry_cls,
         result_cls,
+        reranker=None,
+        use_hybrid: bool = True,
+        use_rerank: bool = True,
     ):
         self.mode = mode
         self.vector_store = vector_store
@@ -32,6 +35,9 @@ class KnowledgeService:
         self.id_generator = id_generator
         self.entry_cls = entry_cls
         self.result_cls = result_cls
+        self.reranker = reranker
+        self.use_hybrid = use_hybrid
+        self.use_rerank = use_rerank
 
     def chunk_text(
         self,
@@ -184,45 +190,80 @@ class KnowledgeService:
         del filter_tags  # Reserved for compatibility.
         embed_fn = embedding_fn or self.embed_text
         embedding = embed_fn(query)
-        results = self.vector_store.query(
-            embedding=embedding,
-            top_k=top_k,
-            filter_source=filter_source,
-        )
 
-        if self.mode == "chroma":
-            search_results = []
-            for i, doc in enumerate(results["documents"][0]):
-                meta = results["metadatas"][0][i]
-                distance = results["distances"][0][i]
-                score = 1.0 - distance
-                search_results.append(
-                    self.result_cls(
-                        id=results["ids"][0][i],
-                        content=doc,
-                        file_path=meta.get("file_path", ""),
-                        title=meta.get("title"),
-                        source=meta.get("source"),
-                        score=score,
-                        metadata=meta,
-                    )
-                )
-            return search_results
+        # Stage 1: Retrieval
+        if self.use_hybrid and self.vector_store.bm25.size > 0:
+            candidate_dicts = self.vector_store.hybrid_query(
+                query=query,
+                embedding=embedding,
+                top_k=top_k * 4,
+                filter_source=filter_source,
+            )
+        else:
+            raw_results = self.vector_store.query(
+                embedding=embedding,
+                top_k=top_k * 4,
+                filter_source=filter_source,
+            )
+            candidate_dicts = self._format_raw_results(raw_results)
 
+        # Stage 2: Re-ranking
+        if self.use_rerank and self.reranker and candidate_dicts:
+            candidate_dicts = self.reranker.rerank(query, candidate_dicts, top_k=top_k)
+
+        candidate_dicts = candidate_dicts[:top_k]
+
+        # Convert dicts to result objects
         search_results = []
-        for hit in results:
+        for doc in candidate_dicts:
             search_results.append(
                 self.result_cls(
-                    id=str(hit.id),
-                    content=hit.payload.get("content", ""),
-                    file_path=hit.payload.get("file_path", ""),
-                    title=hit.payload.get("title"),
-                    source=hit.payload.get("source"),
-                    score=hit.score,
-                    metadata=hit.payload,
+                    id=doc.get("id", ""),
+                    content=doc.get("content", ""),
+                    file_path=doc.get("file_path", ""),
+                    title=doc.get("title"),
+                    source=doc.get("source"),
+                    score=doc.get("score", 0.0),
+                    metadata=doc.get("metadata", {}),
                 )
             )
         return search_results
+
+    def _format_raw_results(self, results) -> list[dict]:
+        """Convert backend-specific raw results into uniform dict list."""
+        if self.mode == "chroma":
+            if not results or not results.get("ids") or not results["ids"][0]:
+                return []
+            formatted = []
+            for i, doc_id in enumerate(results["ids"][0]):
+                meta = results["metadatas"][0][i] if results.get("metadatas") else {}
+                distance = results["distances"][0][i] if results.get("distances") else 0.0
+                formatted.append({
+                    "id": doc_id,
+                    "content": results["documents"][0][i] if results.get("documents") else "",
+                    "score": 1.0 - distance,
+                    "file_path": meta.get("file_path", ""),
+                    "title": meta.get("title"),
+                    "source": meta.get("source"),
+                    "metadata": meta,
+                })
+            return formatted
+
+        # Qdrant
+        formatted = []
+        for hit in (results or []):
+            payload = hit.payload or {}
+            doc_id = payload.get("id", str(hit.id))
+            formatted.append({
+                "id": doc_id,
+                "content": payload.get("content", ""),
+                "score": hit.score,
+                "file_path": payload.get("file_path", ""),
+                "title": payload.get("title"),
+                "source": payload.get("source"),
+                "metadata": payload,
+            })
+        return formatted
 
     def store_entries(
         self,
@@ -277,6 +318,9 @@ def build_knowledge_service(
     id_generator: Callable[[str, str, int], str],
     entry_cls,
     result_cls,
+    reranker=None,
+    use_hybrid: bool = True,
+    use_rerank: bool = True,
 ) -> tuple[KnowledgeService, KnowledgeVectorStore]:
     """Assemble knowledge collaborators for compatibility KnowledgeBase."""
     vector_store = KnowledgeVectorStore(
@@ -298,5 +342,8 @@ def build_knowledge_service(
         id_generator=id_generator,
         entry_cls=entry_cls,
         result_cls=result_cls,
+        reranker=reranker,
+        use_hybrid=use_hybrid,
+        use_rerank=use_rerank,
     )
     return service, vector_store

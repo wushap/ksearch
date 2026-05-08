@@ -20,9 +20,21 @@ def format_size(num_bytes: int) -> str:
         size /= 1024
 
 
+def _build_reranker(config: dict):
+    """Build a ReRanker instance when rerank is enabled, or return None."""
+    if not config.get("rerank_enabled", True):
+        return None
+    try:
+        from ksearch.knowledge.reranker import ReRanker
+        return ReRanker(model_name=config.get("rerank_model"))
+    except Exception:
+        return None
+
+
 def build_kbase(config: dict) -> KnowledgeBase:
     """Build a kbase instance from merged config."""
     kbase_mode = config.get("kbase_mode") or "chroma"
+    reranker = _build_reranker(config)
     return KnowledgeBase(
         mode=kbase_mode,
         persist_dir=config.get("kbase_dir", "~/.ksearch/kbase"),
@@ -30,6 +42,9 @@ def build_kbase(config: dict) -> KnowledgeBase:
         embedding_model=config.get("embedding_model", "nomic-embed-text"),
         embedding_dimension=config.get("embedding_dimension", 768),
         ollama_url=config.get("ollama_url", "http://localhost:11434"),
+        reranker=reranker,
+        use_hybrid=config.get("hybrid_search", True),
+        use_rerank=config.get("rerank_enabled", True),
     )
 
 
