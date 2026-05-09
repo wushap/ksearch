@@ -126,3 +126,22 @@ def test_merge_config_preserves_only_kbase_setting():
     result = merge_config({}, {"only_kbase": True}, DEFAULT_CONFIG)
 
     assert result["only_kbase"] is True
+
+
+def test_default_config_contains_optimization_keys():
+    from ksearch.config import DEFAULT_CONFIG
+    assert "optimization_enabled" in DEFAULT_CONFIG
+    assert DEFAULT_CONFIG["optimization_enabled"] is False
+    assert DEFAULT_CONFIG["optimization_model"] == "gemma4:e2b"
+    assert DEFAULT_CONFIG["optimization_max_iterations"] == 3
+    assert DEFAULT_CONFIG["optimization_confidence_threshold"] == 0.8
+    assert DEFAULT_CONFIG["optimization_max_time_seconds"] == 120
+    assert DEFAULT_CONFIG["optimization_temperature"] == 0.3
+
+
+def test_merge_config_overrides_optimization_keys():
+    from ksearch.config import DEFAULT_CONFIG, merge_config
+    cli_args = {"optimization_enabled": True, "optimization_model": "llama3"}
+    result = merge_config(cli_args, {}, DEFAULT_CONFIG)
+    assert result["optimization_enabled"] is True
+    assert result["optimization_model"] == "llama3"

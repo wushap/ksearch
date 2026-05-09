@@ -41,6 +41,13 @@ DEFAULT_CONFIG = {
     "bm25_top_k": 20,
     "vector_top_k": 20,
     "rrf_k": 60,
+    # Content optimization settings
+    "optimization_enabled": False,
+    "optimization_model": "gemma4:e2b",
+    "optimization_max_iterations": 3,
+    "optimization_confidence_threshold": 0.8,
+    "optimization_max_time_seconds": 120,
+    "optimization_temperature": 0.3,
 }
 
 LEGACY_KEY_ALIASES = {
