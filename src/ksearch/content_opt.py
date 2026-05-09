@@ -1,4 +1,7 @@
-"""Content optimization package."""
+"""Content optimization compatibility shim.
+
+Delegates to ksearch.content_optimization package.
+"""
 
 from ksearch.content_optimization.evaluator import QualityEvaluator
 from ksearch.content_optimization.ollama_client import OllamaChatClient
