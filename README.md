@@ -62,6 +62,18 @@ kbase metadata stores embedding model and dimension. If you switch embedding set
 
 The repo includes a real Ollama + SearXNG end-to-end script for multilingual search validation.
 
+### AI Content Optimization
+
+`ksearch optimize` uses a local LLM via Ollama to iteratively evaluate and refine search results. The optimization loop:
+
+1. fetch search results
+2. evaluate content quality with LLM
+3. identify information gaps
+4. generate targeted follow-up queries
+5. re-search and merge new results
+6. repeat until confidence threshold or max iterations reached
+7. synthesize final optimized content
+
 ## Installation
 
 Base install:
@@ -136,6 +148,31 @@ ksearch search "how does asyncio cancellation propagate" --kbase chroma --iterat
 ```
 
 Use this when local knowledge may be incomplete and you want controlled web expansion plus kbase ingestion.
+
+### 5. AI Content Optimization
+
+```bash
+ksearch optimize "python asyncio best practices"
+```
+
+Uses a local LLM (via Ollama) to iteratively evaluate search result quality, identify gaps, and refine results until a confidence threshold is met. Requires Ollama with `gemma4:e2b` pulled.
+
+```bash
+# Optimize with custom parameters
+ksearch optimize "rust async runtime" --model gemma4:e2b --max-iterations 5 --confidence 0.9
+
+# Optimize a local file
+ksearch optimize "summarize this" --file ./notes.md
+
+# Verbose output showing refinement iterations
+ksearch optimize "distributed systems" --verbose
+```
+
+To pull the required model:
+
+```bash
+ollama pull gemma4:e2b
+```
 
 ## Knowledge Base Commands
 
@@ -234,7 +271,13 @@ Example:
     "vector": 0.4,
     "count": 0.3,
     "coverage": 0.3
-  }
+  },
+  "optimization_enabled": false,
+  "optimization_model": "gemma4:e2b",
+  "optimization_max_iterations": 3,
+  "optimization_confidence_threshold": 0.8,
+  "optimization_max_time_seconds": 120,
+  "optimization_temperature": 0.3
 }
 ```
 
@@ -260,6 +303,15 @@ CLI args > config file > defaults
 - `--embedding-dimension`: choose kbase embedding dimension
 - `--iterative`: enable iterative kbase-first search
 - `--verbose`, `-v`: print detailed execution info
+
+### `ksearch optimize` Options
+
+- `--model`: Ollama model for optimization (default: `gemma4:e2b`)
+- `--max-iterations`, `-i`: max refinement iterations (default: 3)
+- `--confidence`, `-c`: quality confidence threshold (default: 0.8)
+- `--temperature`: LLM temperature (default: 0.3)
+- `--file`: optimize a local file instead of searching
+- `--verbose`, `-v`: show refinement iteration details
 
 ## Testing
 

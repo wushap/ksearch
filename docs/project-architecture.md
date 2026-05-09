@@ -13,10 +13,11 @@ The current codebase is organized around domain boundaries while preserving comp
 
 ## High-Level Flow
 
-There are two main user-facing flows:
+There are three main user-facing flows:
 
 1. Standard search
 2. Iterative kbase-first search
+3. AI content optimization
 
 Standard search:
 
@@ -38,6 +39,16 @@ Iterative search:
 6. Ingest web content into kbase
 7. Re-check sufficiency and convergence
 8. Stop when thresholds or hard limits are met
+
+AI content optimization:
+
+1. Fetch search results (via standard or iterative search)
+2. Aggregate content from results
+3. Evaluate content quality with LLM (returns action/confidence/gaps)
+4. If gaps remain and confidence below threshold, generate refinement query
+5. Re-search with refinement query, merge new results
+6. Repeat evaluation until confidence threshold or max iterations reached
+7. Synthesize final optimized content via LLM
 
 ## Module Layout
 
@@ -88,6 +99,16 @@ Responsible for CLI command registration.
 - `src/ksearch/cli/search.py`: top-level `search`
 - `src/ksearch/cli/kbase.py`: `kbase` subcommands
 - `src/ksearch/cli/system.py`: `stats`, `config`, `health`
+- `src/ksearch/cli/optimize.py`: `optimize` command for AI content optimization
+
+### `src/ksearch/content_optimization/`
+
+Responsible for AI-driven content optimization using LLMs via Ollama.
+
+- `src/ksearch/content_optimization/ollama_client.py`: Ollama `/api/chat` client for LLM generation (distinct from embedding `/api/embeddings`)
+- `src/ksearch/content_optimization/prompts.py`: prompt templates for evaluation, refinement query generation, and content synthesis
+- `src/ksearch/content_optimization/evaluator.py`: LLM-based quality assessment returning structured `QualityAssessment`
+- `src/ksearch/content_optimization/optimizer.py`: iterative refinement orchestrator — evaluate → identify gaps → re-search → repeat
 
 ## Compatibility Layer
 
@@ -97,12 +118,14 @@ Older top-level modules are still present as compatibility shims so existing imp
 - `src/ksearch/cache.py`
 - `src/ksearch/search.py`
 - `src/ksearch/kbase.py`
+- `src/ksearch/content_opt.py` (content optimization)
 - `src/ksearch/iterative_query.py`
 - `src/ksearch/iterative_sufficiency.py`
 - `src/ksearch/iterative_convergence.py`
 - `src/ksearch/iterative_engine.py`
 - `src/ksearch/cli_search.py`
 - `src/ksearch/cli_kbase.py`
+- `src/ksearch/cli_optimize.py` (optimize command registration)
 - `src/ksearch/cli_system.py`
 
 These files should stay thin and delegate to the new domain modules.
@@ -120,6 +143,8 @@ Important types:
 - `ResultEntry`
 - `KnowledgeBaseEntry`
 - `KnowledgeBaseSearchResult`
+- `QualityAssessment` (content optimization quality evaluation result)
+- `OptimizationResult` (content optimization pipeline result)
 
 ## Storage Boundaries
 
