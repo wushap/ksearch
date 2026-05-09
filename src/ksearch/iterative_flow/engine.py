@@ -42,6 +42,7 @@ class IterativeSearchEngine:
             max_iterations=config.get("max_iterations", 5),
             max_time_seconds=config.get("max_time_seconds", 180),
         )
+        self.optimization_enabled = config.get("optimization_enabled", False)
 
     def search(self, query: str) -> list[ResultEntry]:
         start_time = time.time()
@@ -125,7 +126,10 @@ class IterativeSearchEngine:
             prev_results = current_results
             kbase_results = current_results
 
-        return self._combine_results(kbase_results, all_web_entries)
+        combined = self._combine_results(kbase_results, all_web_entries)
+        if self.optimization_enabled:
+            return self._optimize_results(query, combined)
+        return combined
 
     def _convert_kbase_results(self, kbase_results: list[KnowledgeBaseSearchResult]) -> list[ResultEntry]:
         entries = []
@@ -153,6 +157,34 @@ class IterativeSearchEngine:
         kbase_entries = self._convert_kbase_results(kbase_results)
         seen_paths = {entry.file_path for entry in kbase_entries}
         return kbase_entries + [entry for entry in web_entries if entry.file_path not in seen_paths]
+
+    def _optimize_results(self, query: str, results: list[ResultEntry]) -> list[ResultEntry]:
+        """Run content optimization on search results if enabled."""
+        from ksearch.content_optimization import ContentOptimizer, OllamaChatClient, QualityEvaluator
+
+        client = OllamaChatClient(
+            model=self.config.get("optimization_model", "gemma4:e2b"),
+            ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
+            temperature=self.config.get("optimization_temperature", 0.3),
+        )
+        evaluator = QualityEvaluator(
+            client=client,
+            confidence_threshold=self.config.get("optimization_confidence_threshold", 0.8),
+        )
+        optimizer = ContentOptimizer(evaluator=evaluator, client=client, config=self.config)
+
+        opt_result = optimizer.optimize(query, lambda q: [], initial_results=results)
+        if results and opt_result.final_content:
+            results[0] = ResultEntry(
+                url=results[0].url,
+                title=results[0].title,
+                content=opt_result.final_content,
+                file_path=results[0].file_path,
+                cached=results[0].cached,
+                source=results[0].source,
+                cached_date=results[0].cached_date,
+            )
+        return results
 
 
 __all__ = ["IterativeSearchEngine"]
