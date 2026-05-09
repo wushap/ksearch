@@ -33,7 +33,7 @@ class OllamaChatClient:
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "options": {"temperature": temperature or self.temperature},
+            "options": {"temperature": temperature if temperature is not None else self.temperature},
         }
         if format_json:
             body["format"] = "json"
@@ -48,13 +48,13 @@ class OllamaChatClient:
 
         return response.json()["message"]["content"]
 
-    def generate(self, prompt: str, system: str = "", format_json: bool = False) -> str:
+    def generate(self, prompt: str, system: str = "", format_json: bool = False, temperature: float | None = None) -> str:
         """Convenience: single prompt to response."""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        return self.chat(messages, format_json=format_json)
+        return self.chat(messages, format_json=format_json, temperature=temperature)
 
     def health_check(self) -> dict:
         """Check Ollama availability and model presence."""

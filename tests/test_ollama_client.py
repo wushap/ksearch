@@ -37,6 +37,30 @@ class TestOllamaChatClient:
         body = mock_post.call_args[1]["json"]
         assert body["format"] == "json"
 
+    def test_chat_temperature_override(self):
+        client = OllamaChatClient(temperature=0.3)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"message": {"content": "ok"}}
+
+        with patch("ksearch.content_optimization.ollama_client.requests.post", return_value=mock_response) as mock_post:
+            client.chat([{"role": "user", "content": "test"}], temperature=0.0)
+
+        body = mock_post.call_args[1]["json"]
+        assert body["options"]["temperature"] == 0.0
+
+    def test_chat_temperature_default(self):
+        client = OllamaChatClient(temperature=0.5)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"message": {"content": "ok"}}
+
+        with patch("ksearch.content_optimization.ollama_client.requests.post", return_value=mock_response) as mock_post:
+            client.chat([{"role": "user", "content": "test"}])
+
+        body = mock_post.call_args[1]["json"]
+        assert body["options"]["temperature"] == 0.5
+
     def test_chat_connection_error(self):
         client = OllamaChatClient()
         with patch("ksearch.content_optimization.ollama_client.requests.post", side_effect=ConnectionError):
