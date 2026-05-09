@@ -3,6 +3,7 @@
 import typer
 
 from ksearch.cli_kbase import register_kbase_commands
+from ksearch.cli_optimize import register_optimize_command
 from ksearch.cli_search import register_search_command
 from ksearch.cli_system import (
     register_config_command,
@@ -20,6 +21,7 @@ register_stats_command(app)
 register_config_command(app)
 register_health_command(app)
 register_kbase_commands(kbase_app)
+register_optimize_command(app)
 
 
 def main():
