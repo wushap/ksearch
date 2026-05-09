@@ -2,11 +2,12 @@
 
 import logging
 import time
+from collections.abc import Callable
 
 from ksearch.content_optimization.evaluator import QualityEvaluator
 from ksearch.content_optimization.ollama_client import OllamaChatClient
 from ksearch.content_optimization.prompts import format_synthesis_prompt
-from ksearch.models import OptimizationResult, ResultEntry
+from ksearch.models import OptimizationResult, QualityAssessment, ResultEntry
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +26,18 @@ class ContentOptimizer:
     def optimize(
         self,
         query: str,
-        search_fn: callable,
+        search_fn: Callable[[str], list[ResultEntry]],
         initial_results: list[ResultEntry] | None = None,
     ) -> OptimizationResult:
         """Run iterative content optimization with search."""
         start_time = time.time()
-        results = initial_results if initial_results is not None else search_fn(query)
+        results = list(initial_results) if initial_results is not None else search_fn(query)
         aggregated = self._aggregate_content(results)
         refinement_history = []
-        last_assessment = None
+        assessment = QualityAssessment(
+            action="COMPLETE", confidence=0.0, gaps=[], refinement_query="",
+            summary="No iterations performed",
+        )
 
         for iteration in range(1, self.max_iterations + 1):
             if time.time() - start_time > self.max_time_seconds:
@@ -41,7 +45,6 @@ class ContentOptimizer:
                 break
 
             assessment = self.evaluator.evaluate(query, aggregated)
-            last_assessment = assessment
             refinement_history.append({
                 "iteration": iteration,
                 "confidence": assessment.confidence,
@@ -61,7 +64,7 @@ class ContentOptimizer:
         return OptimizationResult(
             original_query=query,
             final_content=final_content,
-            quality=last_assessment or assessment,
+            quality=assessment,
             iterations_used=len(refinement_history),
             elapsed_seconds=time.time() - start_time,
             refinement_history=refinement_history,
@@ -71,7 +74,10 @@ class ContentOptimizer:
         """Optimize existing content without re-searching."""
         start_time = time.time()
         refinement_history = []
-        last_assessment = None
+        assessment = QualityAssessment(
+            action="COMPLETE", confidence=0.0, gaps=[], refinement_query="",
+            summary="No iterations performed",
+        )
 
         for iteration in range(1, self.max_iterations + 1):
             if time.time() - start_time > self.max_time_seconds:
@@ -79,7 +85,6 @@ class ContentOptimizer:
 
             truncated = content[:MAX_CONTENT_CHARS]
             assessment = self.evaluator.evaluate(query, truncated)
-            last_assessment = assessment
             refinement_history.append({
                 "iteration": iteration,
                 "confidence": assessment.confidence,
@@ -94,7 +99,7 @@ class ContentOptimizer:
         return OptimizationResult(
             original_query=query,
             final_content=final_content,
-            quality=last_assessment or assessment,
+            quality=assessment,
             iterations_used=len(refinement_history),
             elapsed_seconds=time.time() - start_time,
             refinement_history=refinement_history,

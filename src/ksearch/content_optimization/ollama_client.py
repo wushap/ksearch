@@ -46,7 +46,10 @@ class OllamaChatClient:
         if response.status_code != 200:
             raise RuntimeError(f"Ollama returned {response.status_code}: {response.text}")
 
-        return response.json()["message"]["content"]
+        try:
+            return response.json()["message"]["content"]
+        except (KeyError, TypeError) as exc:
+            raise RuntimeError(f"Unexpected Ollama response format: {exc}") from exc
 
     def generate(self, prompt: str, system: str = "", format_json: bool = False, temperature: float | None = None) -> str:
         """Convenience: single prompt to response."""

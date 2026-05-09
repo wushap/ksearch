@@ -27,8 +27,12 @@ class QualityEvaluator:
                 format_json=True,
             )
             data = json.loads(raw)
+            action = data.get("action", "COMPLETE")
+            if action not in ("REFINE", "COMPLETE"):
+                logger.warning("Unexpected action from LLM: %s, defaulting to COMPLETE", action)
+                action = "COMPLETE"
             return QualityAssessment(
-                action=data.get("action", "COMPLETE"),
+                action=action,
                 confidence=float(data.get("confidence", 0.5)),
                 gaps=data.get("gaps", []),
                 refinement_query=data.get("refinement_query", ""),

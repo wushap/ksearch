@@ -1,5 +1,7 @@
 """Optimize command registration for ksearch CLI."""
 
+import os
+
 import typer
 from rich.panel import Panel
 
@@ -75,7 +77,6 @@ def register_optimize_command(app: typer.Typer) -> None:
             console.print(f"[dim]Model: {opt_model}, threshold: {config.get('optimization_confidence_threshold', 0.8)}[/dim]")
 
         if file_path:
-            import os
             if not os.path.exists(file_path):
                 console.print(f"[red]File not found: {file_path}[/red]")
                 raise typer.Exit(1)
