@@ -1,6 +1,12 @@
 """Tests for ksearch.models module."""
 
-from ksearch.models import CacheEntry, SearchResult, ResultEntry
+from ksearch.models import (
+    CacheEntry,
+    OptimizationResult,
+    QualityAssessment,
+    ResultEntry,
+    SearchResult,
+)
 
 
 def test_cache_entry_creation():
@@ -44,7 +50,6 @@ def test_result_entry_creation():
 
 
 def test_quality_assessment_dataclass():
-    from ksearch.models import QualityAssessment
     qa = QualityAssessment(
         action="REFINE",
         confidence=0.6,
@@ -58,7 +63,6 @@ def test_quality_assessment_dataclass():
 
 
 def test_optimization_result_dataclass():
-    from ksearch.models import OptimizationResult, QualityAssessment
     assessment = QualityAssessment(
         action="COMPLETE", confidence=0.9, gaps=[], refinement_query="", summary="Good"
     )
