@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     "only_kbase": False,
     "verbose": False,
     # Knowledge base settings
-    "kbase_mode": "",  # "chroma", "qdrant", or "" (disabled)
+    "kbase_mode": "chroma",  # "chroma", "qdrant", or "none"
     "kbase_dir": "~/.ksearch/kbase",
     "kbase_top_k": 5,
     "qdrant_url": "http://localhost:6333",
@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
     "embedding_dimension": 768,
     "ollama_url": "http://localhost:11434",
     # Iterative search settings
-    "iterative_enabled": False,
+    "iterative_enabled": True,
     "max_iterations": 5,
     "max_time_seconds": 180,
     "fact_threshold": 0.7,
@@ -37,12 +37,12 @@ DEFAULT_CONFIG = {
     # Hybrid search settings
     "hybrid_search": True,
     "rerank_enabled": True,
-    "rerank_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "rerank_model": "gemma4:e2b",
     "bm25_top_k": 20,
     "vector_top_k": 20,
     "rrf_k": 60,
     # Content optimization settings
-    "optimization_enabled": False,
+    "optimization_enabled": True,
     "optimization_model": "gemma4:e2b",
     "optimization_max_iterations": 3,
     "optimization_confidence_threshold": 0.8,

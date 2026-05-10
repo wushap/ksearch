@@ -88,9 +88,9 @@ class KnowledgeBase:
             embedding_model: Ollama embedding model name
             embedding_dimension: Expected embedding vector size
             ollama_url: Ollama server URL for embeddings
-            reranker: Optional ReRanker instance for cross-encoder re-ranking
+            reranker: Optional ReRanker instance for Ollama-based re-ranking
             use_hybrid: Enable BM25 + vector hybrid retrieval
-            use_rerank: Enable cross-encoder re-ranking
+            use_rerank: Enable Ollama-based re-ranking
         """
         self.mode = mode
         self.persist_dir = expand_path(persist_dir)

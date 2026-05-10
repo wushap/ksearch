@@ -26,7 +26,10 @@ def _build_reranker(config: dict):
         return None
     try:
         from ksearch.knowledge.reranker import ReRanker
-        return ReRanker(model_name=config.get("rerank_model"))
+        return ReRanker(
+            model_name=config.get("rerank_model"),
+            ollama_url=config.get("ollama_url", "http://localhost:11434"),
+        )
     except Exception:
         return None
 

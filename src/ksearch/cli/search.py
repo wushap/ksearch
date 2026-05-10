@@ -1,5 +1,7 @@
 """Search command registration for ksearch CLI."""
 
+from typing import Optional
+
 import typer
 from rich.panel import Panel
 
@@ -34,9 +36,9 @@ def register_search_command(app: typer.Typer) -> None:
         embedding_model: str = typer.Option(None, "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(None, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option(None, "--ollama-url", help="Ollama URL"),
-        iterative: bool = typer.Option(False, "--iterative", help="Enable iterative kbase-first search"),
-        hybrid: bool = typer.Option(True, "--hybrid/--no-hybrid", help="Enable hybrid BM25+vector search"),
-        rerank: bool = typer.Option(True, "--rerank/--no-rerank", help="Enable cross-encoder re-ranking"),
+        iterative: Optional[bool] = typer.Option(None, "--iterative/--no-iterative", help="Enable iterative kbase-first search"),
+        hybrid: Optional[bool] = typer.Option(None, "--hybrid/--no-hybrid", help="Enable hybrid BM25+vector search"),
+        rerank: Optional[bool] = typer.Option(None, "--rerank/--no-rerank", help="Enable Ollama-based re-ranking"),
         verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     ):
         """Search for keyword in cache, kbase, and/or network."""
@@ -46,10 +48,13 @@ def register_search_command(app: typer.Typer) -> None:
             "no_cache": no_cache,
             "only_cache": only_cache,
             "verbose": verbose,
-            "iterative_enabled": iterative,
-            "hybrid_search": hybrid,
-            "rerank_enabled": rerank,
         }
+        if iterative is not None:
+            cli_args["iterative_enabled"] = iterative
+        if hybrid is not None:
+            cli_args["hybrid_search"] = hybrid
+        if rerank is not None:
+            cli_args["rerank_enabled"] = rerank
         optional_values = {
             "format": output_format,
             "time_range": time_range,
@@ -79,7 +84,9 @@ def register_search_command(app: typer.Typer) -> None:
         if verbose:
             console.print(Panel(f"Searching: {keyword}", title="ksearch"))
 
-        if config.get("iterative_enabled"):
+        iterative_enabled = config.get("iterative_enabled") and not config.get("only_cache", False) and not config.get("only_kbase", False)
+
+        if iterative_enabled:
             kbase_mode_value = config.get("kbase_mode")
             if not kbase_mode_value or kbase_mode_value == "none":
                 console.print("[red]Iterative search requires --kbase mode (chroma or qdrant)[/red]")

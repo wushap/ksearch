@@ -519,6 +519,74 @@ class TestIterativeSearchEngine:
         assert all(r.source == "kbase" for r in results)
         engine.searxng.search.assert_not_called()
 
+    def test_search_optimizes_sufficient_kbase_results_when_enabled(self, engine):
+        """Test optimization runs even when initial kbase results are already sufficient."""
+        kbase_results = [self.make_kbase_result(0.9, idx=i) for i in range(10)]
+        optimized_results = [
+            ResultEntry(
+                url="https://example.com/optimized",
+                title="Optimized Result",
+                content="optimized content",
+                file_path="/optimized/path",
+                cached=True,
+                source="kbase",
+                cached_date="2024-01-01",
+            ),
+        ]
+        engine.kbase.search = Mock(return_value=kbase_results)
+        engine.optimization_enabled = True
+        engine._optimize_results = Mock(return_value=optimized_results)
+
+        results = engine.search("how to test")
+
+        engine._optimize_results.assert_called_once()
+        optimized_query, optimized_input = engine._optimize_results.call_args.args
+        assert optimized_query == "how to test"
+        assert len(optimized_input) == 10
+        assert all(entry.source == "kbase" for entry in optimized_input)
+        assert results == optimized_results
+        engine.searxng.search.assert_not_called()
+
+    def test_optimize_results_falls_back_to_original_results_on_optimizer_failure(self, engine, monkeypatch):
+        """Test optimization failure does not break iterative search results."""
+        import ksearch.content_optimization as optimization_module
+
+        class FailingOptimizer:
+            def __init__(self, **kwargs):
+                pass
+
+            def optimize(self, *args, **kwargs):
+                raise RuntimeError("optimizer unavailable")
+
+        class DummyClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class DummyEvaluator:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        results = [
+            ResultEntry(
+                url="https://example.com/original",
+                title="Original Result",
+                content="original content",
+                file_path="/original/path",
+                cached=True,
+                source="kbase",
+                cached_date="2024-01-01",
+            ),
+        ]
+
+        monkeypatch.setattr(optimization_module, "ContentOptimizer", FailingOptimizer)
+        monkeypatch.setattr(optimization_module, "OllamaChatClient", DummyClient)
+        monkeypatch.setattr(optimization_module, "QualityEvaluator", DummyEvaluator)
+
+        optimized = engine._optimize_results("how to test", results)
+
+        assert optimized == results
+        assert optimized[0].content == "original content"
+
     def test_search_triggers_web_search_when_insufficient(self, mock_kbase, mock_searxng, engine):
         """Test search triggers web search when kbase insufficient."""
         # Low kbase results

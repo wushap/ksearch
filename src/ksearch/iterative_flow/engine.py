@@ -1,5 +1,6 @@
 """Iterative kbase-first search orchestration."""
 
+import logging
 import time
 
 from ksearch.cache import CacheManager
@@ -10,6 +11,8 @@ from ksearch.iterative_flow.sufficiency import SufficiencyEvaluator
 from ksearch.kbase import KnowledgeBase, KnowledgeBaseSearchResult
 from ksearch.models import ResultEntry
 from ksearch.searxng import SearXNGClient
+
+logger = logging.getLogger(__name__)
 
 
 class IterativeSearchEngine:
@@ -55,7 +58,10 @@ class IterativeSearchEngine:
         kbase_results = self.kbase.search(query, top_k=kbase_top_k)
         score = self.sufficiency.score(kbase_results)
         if self.sufficiency.is_sufficient(score, threshold):
-            return self._convert_kbase_results(kbase_results)
+            initial_results = self._convert_kbase_results(kbase_results)
+            if self.optimization_enabled:
+                return self._optimize_results(query, initial_results)
+            return initial_results
 
         iteration = 0
         prev_results = kbase_results
@@ -162,28 +168,31 @@ class IterativeSearchEngine:
         """Run content optimization on search results if enabled."""
         from ksearch.content_optimization import ContentOptimizer, OllamaChatClient, QualityEvaluator
 
-        client = OllamaChatClient(
-            model=self.config.get("optimization_model", "gemma4:e2b"),
-            ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
-            temperature=self.config.get("optimization_temperature", 0.3),
-        )
-        evaluator = QualityEvaluator(
-            client=client,
-            confidence_threshold=self.config.get("optimization_confidence_threshold", 0.8),
-        )
-        optimizer = ContentOptimizer(evaluator=evaluator, client=client, config=self.config)
-
-        opt_result = optimizer.optimize(query, lambda q: [], initial_results=results)
-        if results and opt_result.final_content:
-            results[0] = ResultEntry(
-                url=results[0].url,
-                title=results[0].title,
-                content=opt_result.final_content,
-                file_path=results[0].file_path,
-                cached=results[0].cached,
-                source=results[0].source,
-                cached_date=results[0].cached_date,
+        try:
+            client = OllamaChatClient(
+                model=self.config.get("optimization_model", "gemma4:e2b"),
+                ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
+                temperature=self.config.get("optimization_temperature", 0.3),
             )
+            evaluator = QualityEvaluator(
+                client=client,
+                confidence_threshold=self.config.get("optimization_confidence_threshold", 0.8),
+            )
+            optimizer = ContentOptimizer(evaluator=evaluator, client=client, config=self.config)
+
+            opt_result = optimizer.optimize(query, lambda q: [], initial_results=results)
+            if results and opt_result.final_content:
+                results[0] = ResultEntry(
+                    url=results[0].url,
+                    title=results[0].title,
+                    content=opt_result.final_content,
+                    file_path=results[0].file_path,
+                    cached=results[0].cached,
+                    source=results[0].source,
+                    cached_date=results[0].cached_date,
+                )
+        except Exception as exc:
+            logger.warning("Iterative optimization failed: %s", exc)
         return results
 
 

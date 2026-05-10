@@ -20,8 +20,9 @@ def test_default_config_structure():
     assert DEFAULT_CONFIG["format"] == "markdown"
     assert DEFAULT_CONFIG["store_dir"] == "~/.ksearch/store"
     assert DEFAULT_CONFIG["index_db"] == "~/.ksearch/index.db"
+    assert DEFAULT_CONFIG["kbase_mode"] == "chroma"
     assert DEFAULT_CONFIG["kbase_dir"] == "~/.ksearch/kbase"
-    assert DEFAULT_CONFIG["iterative_enabled"] is False
+    assert DEFAULT_CONFIG["iterative_enabled"] is True
     assert DEFAULT_CONFIG["embedding_dimension"] == 768
     assert DEFAULT_CONFIG["max_iterations"] == 5
     assert DEFAULT_CONFIG["fact_threshold"] == 0.7
@@ -84,7 +85,7 @@ def test_merge_config_file_overrides_default():
 def test_merge_config_preserves_iterative_defaults():
     result = merge_config({}, {}, DEFAULT_CONFIG)
 
-    assert result["iterative_enabled"] is False
+    assert result["iterative_enabled"] is True
     assert result["max_iterations"] == 5
     assert result["max_time_seconds"] == 180
     assert result["fact_threshold"] == 0.7
@@ -130,12 +131,17 @@ def test_merge_config_preserves_only_kbase_setting():
 
 def test_default_config_contains_optimization_keys():
     assert "optimization_enabled" in DEFAULT_CONFIG
-    assert DEFAULT_CONFIG["optimization_enabled"] is False
+    assert DEFAULT_CONFIG["optimization_enabled"] is True
     assert DEFAULT_CONFIG["optimization_model"] == "gemma4:e2b"
     assert DEFAULT_CONFIG["optimization_max_iterations"] == 3
     assert DEFAULT_CONFIG["optimization_confidence_threshold"] == 0.8
     assert DEFAULT_CONFIG["optimization_max_time_seconds"] == 120
     assert DEFAULT_CONFIG["optimization_temperature"] == 0.3
+
+
+def test_default_config_contains_ollama_rerank_model():
+    assert DEFAULT_CONFIG["rerank_enabled"] is True
+    assert DEFAULT_CONFIG["rerank_model"] == "gemma4:e2b"
 
 
 def test_merge_config_overrides_optimization_keys():

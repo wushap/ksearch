@@ -80,6 +80,58 @@ def test_search_command_accepts_kbase_dir_for_only_cache_flow():
         assert "kbase Doc" in result.output
 
 
+def test_search_command_uses_iterative_defaults_from_config(monkeypatch):
+    """Search should honor iterative defaults when no explicit iterative flag is passed."""
+
+    class FakeCache:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeSearxng:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeConverter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeSearchEngine:
+        called = False
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def search(self, *args, **kwargs):
+            FakeSearchEngine.called = True
+            return []
+
+    class FakeIterativeEngine:
+        called = False
+        config = None
+
+        def __init__(self, _kbase, _searxng, _converter, _cache, config):
+            FakeIterativeEngine.config = config
+
+        def search(self, keyword):
+            FakeIterativeEngine.called = True
+            return []
+
+    monkeypatch.setattr("ksearch.cli.search.load_config", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr("ksearch.cli.search.CacheManager", FakeCache)
+    monkeypatch.setattr("ksearch.cli.search.SearXNGClient", FakeSearxng)
+    monkeypatch.setattr("ksearch.cli.search.ContentConverter", FakeConverter)
+    monkeypatch.setattr("ksearch.cli.search.SearchEngine", FakeSearchEngine)
+    monkeypatch.setattr("ksearch.cli.search.IterativeSearchEngine", FakeIterativeEngine)
+    monkeypatch.setattr("ksearch.cli.search.build_kbase", lambda config: object())
+
+    result = runner.invoke(app, ["search", "default iterative query"])
+
+    assert result.exit_code == 0
+    assert FakeIterativeEngine.called is True
+    assert FakeIterativeEngine.config["iterative_enabled"] is True
+    assert FakeSearchEngine.called is False
+
+
 def test_query_command_searches_kbase_entries():
     with tempfile.TemporaryDirectory() as tmpdir:
         kbase_dir = os.path.join(tmpdir, "kbase")
