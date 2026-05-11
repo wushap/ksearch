@@ -241,7 +241,15 @@ Default config path:
 ~/.ksearch/config.json
 ```
 
-Example:
+Repository example:
+
+```text
+./config.example.json
+```
+
+Copy it to `~/.ksearch/config.json` and adjust only the keys you need.
+
+Default example:
 
 ```json
 {
@@ -254,15 +262,17 @@ Example:
   "time_range": "",
   "no_cache": false,
   "only_cache": false,
+  "only_kbase": false,
   "verbose": false,
-  "kbase_mode": "",
+  "kbase_mode": "chroma",
   "kbase_dir": "~/.ksearch/kbase",
   "kbase_top_k": 5,
   "qdrant_url": "http://localhost:6333",
+  "embedding_mode": "ollama",
   "embedding_model": "nomic-embed-text",
   "embedding_dimension": 768,
   "ollama_url": "http://localhost:11434",
-  "iterative_enabled": false,
+  "iterative_enabled": true,
   "max_iterations": 5,
   "max_time_seconds": 180,
   "fact_threshold": 0.7,
@@ -272,7 +282,13 @@ Example:
     "count": 0.3,
     "coverage": 0.3
   },
-  "optimization_enabled": false,
+  "hybrid_search": true,
+  "rerank_enabled": true,
+  "rerank_model": "gemma4:e2b",
+  "bm25_top_k": 20,
+  "vector_top_k": 20,
+  "rrf_k": 60,
+  "optimization_enabled": true,
   "optimization_model": "gemma4:e2b",
   "optimization_max_iterations": 3,
   "optimization_confidence_threshold": 0.8,
@@ -280,6 +296,88 @@ Example:
   "optimization_temperature": 0.3
 }
 ```
+
+All keys in `~/.ksearch/config.json` are optional. You can keep a sparse file and only override the values you care about; omitted keys fall back to built-in defaults.
+
+### Configuration Reference
+
+#### Search and Output
+
+| Key | Default | Allowed / Type | What it does |
+| --- | --- | --- | --- |
+| `searxng_url` | `http://localhost:48888` | URL string | Base URL for SearXNG web search requests. |
+| `store_dir` | `~/.ksearch/store` | Path string | Directory where converted page content is stored on disk. |
+| `index_db` | `~/.ksearch/index.db` | Path string | SQLite index used for cache metadata and cache lookup. |
+| `max_results` | `10` | Integer >= 1 | Max number of web results requested per search iteration. |
+| `timeout` | `30` | Integer seconds | HTTP timeout for SearXNG, page fetch, and conversion work. |
+| `format` | `markdown` | `markdown`, `path` | CLI output format. `markdown` prints structured content, `path` prints cached file paths only. |
+| `time_range` | `""` | `""`, `day`, `week`, `month`, `year` | Optional freshness filter for web search and partial-cache lookup. Empty string disables the filter. |
+| `no_cache` | `false` | Boolean | Skip cache reads and force web retrieval. New results can still be written into cache. |
+| `only_cache` | `false` | Boolean | Return cache matches only. This disables network search and also disables iterative kbase-first flow. |
+| `only_kbase` | `false` | Boolean | Search only the kbase and skip web search. Useful for fully local retrieval. |
+| `verbose` | `false` | Boolean | Print extra CLI progress and backend status messages. |
+
+#### Knowledge Base
+
+| Key | Default | Allowed / Type | What it does |
+| --- | --- | --- | --- |
+| `kbase_mode` | `chroma` | `chroma`, `qdrant`, `none` | Selects the kbase backend. `none` disables kbase retrieval. Iterative search requires `chroma` or `qdrant`. |
+| `kbase_dir` | `~/.ksearch/kbase` | Path string | Persistent storage directory for local kbase data and metadata. |
+| `kbase_top_k` | `5` | Integer >= 1 | Number of kbase hits returned and used during iterative sufficiency checks. |
+| `qdrant_url` | `http://localhost:6333` | URL string | Qdrant server address. Used only when `kbase_mode` is `qdrant`. |
+
+#### Embeddings
+
+| Key | Default | Allowed / Type | What it does |
+| --- | --- | --- | --- |
+| `embedding_mode` | `ollama` | `ollama`, `sentence-transformers`, `simple` | Preferred embedding backend for embedding helper paths. Keep `ollama` for the normal local setup. |
+| `embedding_model` | `nomic-embed-text` | Model name string | Embedding model name used by the kbase. Changing it for an existing kbase requires rebuilding or resetting that kbase. |
+| `embedding_dimension` | `768` | Integer >= 1 | Expected embedding vector length. Must match the actual model output dimension stored in the kbase. |
+| `ollama_url` | `http://localhost:11434` | URL string | Ollama server address for embeddings, reranking, and content optimization. |
+
+#### Iterative Search
+
+| Key | Default | Allowed / Type | What it does |
+| --- | --- | --- | --- |
+| `iterative_enabled` | `true` | Boolean | Enables kbase-first iterative search. The engine checks kbase sufficiency first, then falls back to web search only when needed. |
+| `max_iterations` | `5` | Integer >= 1 | Upper bound on iterative search rounds after the initial kbase pass. |
+| `max_time_seconds` | `180` | Integer seconds | Time budget for one iterative search request. |
+| `fact_threshold` | `0.7` | Float | Sufficiency threshold for fact-style queries that need stronger evidence. |
+| `exploration_threshold` | `0.4` | Float | Sufficiency threshold for broader exploratory queries. |
+| `scoring_weights` | `{"vector": 0.4, "count": 0.3, "coverage": 0.3}` | Object with `vector`, `count`, `coverage` floats | Weights used by the sufficiency scorer to balance semantic match quality, result count, and content coverage. |
+
+#### Hybrid Retrieval and Re-ranking
+
+| Key | Default | Allowed / Type | What it does |
+| --- | --- | --- | --- |
+| `hybrid_search` | `true` | Boolean | Enables BM25 + vector hybrid retrieval inside the kbase. |
+| `rerank_enabled` | `true` | Boolean | Enables the Ollama reranker on top of retrieved kbase candidates. |
+| `rerank_model` | `gemma4:e2b` | Model name string | Ollama model name used for reranking candidate passages. |
+| `bm25_top_k` | `20` | Integer >= 1 | Number of lexical BM25 candidates considered during hybrid retrieval. |
+| `vector_top_k` | `20` | Integer >= 1 | Number of vector-search candidates considered during hybrid retrieval. |
+| `rrf_k` | `60` | Integer >= 1 | Reciprocal Rank Fusion constant used when combining BM25 and vector ranks. |
+
+#### Content Optimization
+
+| Key | Default | Allowed / Type | What it does |
+| --- | --- | --- | --- |
+| `optimization_enabled` | `true` | Boolean | Enables post-processing optimization for iterative search results. |
+| `optimization_model` | `gemma4:e2b` | Model name string | Ollama model name used by the optimization/evaluation loop. |
+| `optimization_max_iterations` | `3` | Integer >= 1 | Max number of refinement rounds for content optimization. |
+| `optimization_confidence_threshold` | `0.8` | Float from `0.0` to `1.0` | Stops refinement once the evaluator reaches this confidence threshold. |
+| `optimization_max_time_seconds` | `120` | Integer seconds | Time budget for a single optimization request. |
+| `optimization_temperature` | `0.3` | Float >= `0.0` | Sampling temperature used for optimization model responses. |
+
+#### Legacy Aliases
+
+Older config files are still accepted with these compatibility keys:
+
+| Legacy key | Current key |
+| --- | --- |
+| `kb_mode` | `kbase_mode` |
+| `kb_dir` | `kbase_dir` |
+| `kb_top_k` | `kbase_top_k` |
+| `only_kb` | `only_kbase` |
 
 Priority order:
 

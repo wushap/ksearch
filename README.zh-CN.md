@@ -242,7 +242,15 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
 ~/.ksearch/config.json
 ```
 
-示例：
+仓库内示例：
+
+```text
+./config.example.json
+```
+
+可以先复制到 `~/.ksearch/config.json`，再按需修改。
+
+默认示例：
 
 ```json
 {
@@ -255,15 +263,17 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
   "time_range": "",
   "no_cache": false,
   "only_cache": false,
+  "only_kbase": false,
   "verbose": false,
-  "kbase_mode": "",
+  "kbase_mode": "chroma",
   "kbase_dir": "~/.ksearch/kbase",
   "kbase_top_k": 5,
   "qdrant_url": "http://localhost:6333",
+  "embedding_mode": "ollama",
   "embedding_model": "nomic-embed-text",
   "embedding_dimension": 768,
   "ollama_url": "http://localhost:11434",
-  "iterative_enabled": false,
+  "iterative_enabled": true,
   "max_iterations": 5,
   "max_time_seconds": 180,
   "fact_threshold": 0.7,
@@ -273,7 +283,13 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
     "count": 0.3,
     "coverage": 0.3
   },
-  "optimization_enabled": false,
+  "hybrid_search": true,
+  "rerank_enabled": true,
+  "rerank_model": "gemma4:e2b",
+  "bm25_top_k": 20,
+  "vector_top_k": 20,
+  "rrf_k": 60,
+  "optimization_enabled": true,
   "optimization_model": "gemma4:e2b",
   "optimization_max_iterations": 3,
   "optimization_confidence_threshold": 0.8,
@@ -281,6 +297,88 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
   "optimization_temperature": 0.3
 }
 ```
+
+`~/.ksearch/config.json` 里的所有键都可以省略。你可以只保留需要覆盖的字段，未填写的字段会自动回退到内置默认值。
+
+### 配置项说明
+
+#### 搜索与输出
+
+| 配置项 | 默认值 | 可选值 / 类型 | 用处 |
+| --- | --- | --- | --- |
+| `searxng_url` | `http://localhost:48888` | URL 字符串 | SearXNG 网页搜索服务地址。 |
+| `store_dir` | `~/.ksearch/store` | 路径字符串 | 转换后的网页正文在本地磁盘上的保存目录。 |
+| `index_db` | `~/.ksearch/index.db` | 路径字符串 | 缓存元数据使用的 SQLite 索引库。 |
+| `max_results` | `10` | 大于等于 1 的整数 | 每次搜索迭代最多请求多少条网页结果。 |
+| `timeout` | `30` | 秒数整数 | SearXNG 请求、网页抓取和内容转换的超时时间。 |
+| `format` | `markdown` | `markdown`、`path` | CLI 输出格式。`markdown` 输出结构化内容，`path` 只输出缓存文件路径。 |
+| `time_range` | `""` | `""`、`day`、`week`、`month`、`year` | 可选的时间过滤条件，同时作用于网页搜索和部分缓存匹配。空字符串表示不限制。 |
+| `no_cache` | `false` | 布尔值 | 跳过缓存读取，强制走联网搜索；新结果仍可能写入缓存。 |
+| `only_cache` | `false` | 布尔值 | 只返回缓存命中，禁用联网搜索，也会关闭 iterative kbase-first 流程。 |
+| `only_kbase` | `false` | 布尔值 | 只查 kbase，不走网页搜索，适合纯本地检索。 |
+| `verbose` | `false` | 布尔值 | 输出更详细的 CLI 执行信息和后端状态。 |
+
+#### kbase
+
+| 配置项 | 默认值 | 可选值 / 类型 | 用处 |
+| --- | --- | --- | --- |
+| `kbase_mode` | `chroma` | `chroma`、`qdrant`、`none` | 选择 kbase 后端。`none` 表示关闭 kbase；iterative 搜索要求这里是 `chroma` 或 `qdrant`。 |
+| `kbase_dir` | `~/.ksearch/kbase` | 路径字符串 | 本地 kbase 数据和元数据的持久化目录。 |
+| `kbase_top_k` | `5` | 大于等于 1 的整数 | kbase 检索返回的结果数，也是 iterative sufficiency 判断使用的候选数。 |
+| `qdrant_url` | `http://localhost:6333` | URL 字符串 | Qdrant 服务地址，仅在 `kbase_mode=qdrant` 时使用。 |
+
+#### Embedding
+
+| 配置项 | 默认值 | 可选值 / 类型 | 用处 |
+| --- | --- | --- | --- |
+| `embedding_mode` | `ollama` | `ollama`、`sentence-transformers`、`simple` | embedding helper 偏好的后端模式。常规本地部署建议保持 `ollama`。 |
+| `embedding_model` | `nomic-embed-text` | 模型名字符串 | kbase 使用的 embedding 模型。对已有 kbase 修改该值，通常需要重建或重置 kbase。 |
+| `embedding_dimension` | `768` | 大于等于 1 的整数 | 期望的 embedding 向量维度，必须和实际模型输出维度一致。 |
+| `ollama_url` | `http://localhost:11434` | URL 字符串 | Ollama 服务地址，embedding、rerank、内容优化都会用到。 |
+
+#### 迭代搜索
+
+| 配置项 | 默认值 | 可选值 / 类型 | 用处 |
+| --- | --- | --- | --- |
+| `iterative_enabled` | `true` | 布尔值 | 开启 kbase-first 的迭代搜索流程。系统会先判断 kbase 结果是否足够，不够时再回退到网页搜索。 |
+| `max_iterations` | `5` | 大于等于 1 的整数 | 初始 kbase 检索之后，最多允许再进行多少轮迭代。 |
+| `max_time_seconds` | `180` | 秒数整数 | 单次 iterative 搜索的总时间预算。 |
+| `fact_threshold` | `0.7` | 浮点数 | 面向事实型问题的 sufficiency 阈值，要求更高。 |
+| `exploration_threshold` | `0.4` | 浮点数 | 面向探索型问题的 sufficiency 阈值，要求更宽松。 |
+| `scoring_weights` | `{"vector": 0.4, "count": 0.3, "coverage": 0.3}` | 含 `vector`、`count`、`coverage` 浮点字段的对象 | sufficiency 打分权重，用来平衡语义相关性、结果数量和内容覆盖度。 |
+
+#### 混合检索与重排
+
+| 配置项 | 默认值 | 可选值 / 类型 | 用处 |
+| --- | --- | --- | --- |
+| `hybrid_search` | `true` | 布尔值 | 开启 kbase 内部的 BM25 + 向量混合检索。 |
+| `rerank_enabled` | `true` | 布尔值 | 在召回后的 kbase 候选上开启 Ollama rerank。 |
+| `rerank_model` | `gemma4:e2b` | 模型名字符串 | 用于 rerank 候选片段的 Ollama 模型名。 |
+| `bm25_top_k` | `20` | 大于等于 1 的整数 | 混合检索时参与融合的 BM25 候选数量。 |
+| `vector_top_k` | `20` | 大于等于 1 的整数 | 混合检索时参与融合的向量候选数量。 |
+| `rrf_k` | `60` | 大于等于 1 的整数 | BM25 和向量结果做 RRF 融合时使用的常数。 |
+
+#### 内容优化
+
+| 配置项 | 默认值 | 可选值 / 类型 | 用处 |
+| --- | --- | --- | --- |
+| `optimization_enabled` | `true` | 布尔值 | 开启 iterative 搜索结果的后处理优化。 |
+| `optimization_model` | `gemma4:e2b` | 模型名字符串 | 内容优化和质量评估循环使用的 Ollama 模型名。 |
+| `optimization_max_iterations` | `3` | 大于等于 1 的整数 | 内容优化最多允许的 refinement 轮数。 |
+| `optimization_confidence_threshold` | `0.8` | `0.0` 到 `1.0` 的浮点数 | 当评估器置信度达到该阈值时停止继续 refinement。 |
+| `optimization_max_time_seconds` | `120` | 秒数整数 | 单次优化请求的总时间预算。 |
+| `optimization_temperature` | `0.3` | 大于等于 `0.0` 的浮点数 | 优化模型的采样温度。 |
+
+#### 兼容旧字段
+
+旧配置文件中的以下字段仍然会被兼容映射：
+
+| 旧字段 | 当前字段 |
+| --- | --- |
+| `kb_mode` | `kbase_mode` |
+| `kb_dir` | `kbase_dir` |
+| `kb_top_k` | `kbase_top_k` |
+| `only_kb` | `only_kbase` |
 
 优先级：
 

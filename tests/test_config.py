@@ -149,3 +149,12 @@ def test_merge_config_overrides_optimization_keys():
     result = merge_config(cli_args, {}, DEFAULT_CONFIG)
     assert result["optimization_enabled"] is True
     assert result["optimization_model"] == "llama3"
+
+
+def test_root_config_example_matches_default_config():
+    example_path = Path(__file__).resolve().parents[1] / "config.example.json"
+
+    with open(example_path) as f:
+        example_config = json.load(f)
+
+    assert example_config == DEFAULT_CONFIG
