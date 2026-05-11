@@ -1,9 +1,11 @@
 """Tests for ksearch.search module."""
 
+import json
 import tempfile
 import os
 from unittest.mock import Mock, patch
 
+from ksearch.debug_logging import finish_debug_session, start_debug_session
 from ksearch.search import SearchEngine
 from ksearch.cache import CacheManager
 from ksearch.searxng import SearXNGClient
@@ -155,3 +157,50 @@ def test_search_engine_compatibility_export_points_to_searching_service():
 
     assert SearchEngine is SearchEngineFromSearching
     assert SearchEngine is SearchEngineFromService
+
+
+def test_search_engine_logs_cache_and_network_events(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    cache = Mock()
+    cache.exact_match.return_value = []
+    cache.partial_match.return_value = []
+    cache.save.return_value = str(tmp_path / "result.md")
+
+    searxng = Mock(spec=SearXNGClient)
+    searxng.search.return_value = [
+        SearchResult(
+            url="https://example.com/article",
+            title="Example",
+            content="Snippet",
+            engine="google",
+            published_date="",
+        )
+    ]
+
+    converter = Mock(spec=ContentConverter)
+    converter.convert_url.return_value = "Converted content that is definitely long enough."
+
+    session = start_debug_session(
+        argv=["--debug", "search", "python"],
+        cwd="/work/tree",
+        command="search",
+    )
+
+    engine = SearchEngine(cache, searxng, converter)
+    results = engine.search(
+        "python",
+        {"no_cache": False, "only_cache": False, "time_range": None, "max_results": 10, "timeout": 30},
+    )
+    finish_debug_session(success=True, command="search", summary={"result_count": len(results)})
+
+    events = [
+        json.loads(line)
+        for line in (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    event_names = [event["event"] for event in events]
+
+    assert "cache_lookup" in event_names
+    assert "network_search_start" in event_names
+    assert "network_search_results" in event_names
+    assert "conversion_complete" in event_names

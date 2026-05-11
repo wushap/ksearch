@@ -5,6 +5,7 @@ import threading
 import requests
 from markitdown import MarkItDown
 
+from ksearch.debug_logging import log_event
 from ksearch.web.cleaner import clean_content
 
 try:
@@ -31,12 +32,24 @@ class WebContentConverter:
     def _extract_main_content(self, url: str) -> str:
         """Fetch page HTML and extract the primary article body when possible."""
         if trafilatura_extract is None:
+            log_event(
+                "ksearch.web.extractor",
+                "main_content_unavailable",
+                {"url": url, "reason": "trafilatura_missing"},
+                level="WARNING",
+            )
             return ""
 
         try:
             response = requests.get(url, headers=self._headers, timeout=self.url_timeout)
             response.raise_for_status()
-        except Exception:
+        except Exception as exc:
+            log_event(
+                "ksearch.web.extractor",
+                "main_content_fetch_failed",
+                {"url": url, "message": str(exc)},
+                level="WARNING",
+            )
             return ""
 
         extracted = trafilatura_extract(
@@ -49,8 +62,20 @@ class WebContentConverter:
             deduplicate=True,
         )
         if not extracted:
+            log_event(
+                "ksearch.web.extractor",
+                "main_content_missing",
+                {"url": url},
+                level="WARNING",
+            )
             return ""
-        return clean_content(extracted)
+        cleaned = clean_content(extracted)
+        log_event(
+            "ksearch.web.extractor",
+            "main_content_extracted",
+            {"url": url, "content_preview": cleaned},
+        )
+        return cleaned
 
     def _convert_with_markitdown(self, url: str) -> str:
         """Fallback conversion path using markitdown."""
@@ -69,19 +94,50 @@ class WebContentConverter:
         thread.join(timeout=self.url_timeout)
 
         if thread.is_alive():
+            log_event(
+                "ksearch.web.extractor",
+                "markitdown_timeout",
+                {"url": url},
+                level="WARNING",
+            )
             return ""
         if exception_container:
+            log_event(
+                "ksearch.web.extractor",
+                "markitdown_failed",
+                {"url": url, "message": str(exception_container[0])},
+                level="WARNING",
+            )
             return ""
 
         raw_content = result_container[0] if result_container else ""
-        return clean_content(raw_content)
+        cleaned = clean_content(raw_content)
+        log_event(
+            "ksearch.web.extractor",
+            "markitdown_converted",
+            {"url": url, "content_preview": cleaned},
+        )
+        return cleaned
 
     def convert_url(self, url: str) -> str:
         """Convert URL content to Markdown and clean noise."""
         cleaned = self._extract_main_content(url)
         if len(cleaned) < 50:
+            if cleaned:
+                log_event(
+                    "ksearch.web.extractor",
+                    "main_content_short",
+                    {"url": url, "content_preview": cleaned},
+                    level="WARNING",
+                )
             cleaned = self._convert_with_markitdown(url)
         if len(cleaned) < 50:
+            log_event(
+                "ksearch.web.extractor",
+                "conversion_empty",
+                {"url": url},
+                level="WARNING",
+            )
             return ""
         return cleaned
 

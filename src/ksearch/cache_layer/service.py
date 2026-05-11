@@ -4,6 +4,7 @@ import os
 import sqlite3
 from datetime import datetime
 
+from ksearch.debug_logging import log_event
 from ksearch.cache_layer.repository import CacheRepository, normalize_engine_names
 from ksearch.cache_layer.store import CacheStore, hash_url
 from ksearch.models import CacheEntry
@@ -37,6 +38,11 @@ class CacheManager:
             cached_date=cached_date,
             metadata=metadata,
         )
+        log_event(
+            "ksearch.cache",
+            "cache_save",
+            {"url": url, "keyword": keyword, "file_path": file_path},
+        )
         return file_path
 
     def exists(self, url: str) -> bool:
@@ -50,7 +56,13 @@ class CacheManager:
     def exact_match(self, keyword: str) -> list[CacheEntry]:
         """Find entries with exact keyword match using SQLite."""
         rows = self.repository.exact_match_rows(keyword)
-        return [self._load_entry_content(self._row_to_entry(row)) for row in rows]
+        entries = [self._load_entry_content(self._row_to_entry(row)) for row in rows]
+        log_event(
+            "ksearch.cache",
+            "cache_exact_match",
+            {"keyword": keyword, "count": len(entries)},
+        )
+        return entries
 
     def partial_match(
         self,
@@ -59,7 +71,13 @@ class CacheManager:
     ) -> list[CacheEntry]:
         """Find entries with partial keyword match using SQLite."""
         rows = self.repository.partial_match_rows(keyword, time_range=time_range)
-        return [self._load_entry_content(self._row_to_entry(row)) for row in rows]
+        entries = [self._load_entry_content(self._row_to_entry(row)) for row in rows]
+        log_event(
+            "ksearch.cache",
+            "cache_partial_match",
+            {"keyword": keyword, "time_range": time_range, "count": len(entries)},
+        )
+        return entries
 
     def _row_to_entry(self, row: sqlite3.Row) -> CacheEntry:
         """Convert SQLite row to CacheEntry."""

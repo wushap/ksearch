@@ -4,6 +4,7 @@ from typing import Optional
 
 import requests
 
+from ksearch.debug_logging import log_event
 from ksearch.models import SearchResult
 
 
@@ -30,10 +31,28 @@ class SearXNGClient:
         if time_range:
             params["time_range"] = time_range
 
-        response = requests.get(url, params=params, timeout=self.timeout)
-        response.raise_for_status()
-
-        data = response.json()
+        log_event(
+            "ksearch.web.search_client",
+            "request_start",
+            {
+                "url": url,
+                "query": query,
+                "time_range": time_range,
+                "max_results": max_results,
+            },
+        )
+        try:
+            response = requests.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as exc:
+            log_event(
+                "ksearch.web.search_client",
+                "request_error",
+                {"query": query, "message": str(exc)},
+                level="ERROR",
+            )
+            raise
         results = []
 
         for item in data.get("results", [])[:max_results]:
@@ -59,4 +78,14 @@ class SearXNGClient:
                 )
             )
 
+        log_event(
+            "ksearch.web.search_client",
+            "response_received",
+            {
+                "query": query,
+                "status_code": response.status_code,
+                "raw_count": len(data.get("results", [])),
+                "result_count": len(results),
+            },
+        )
         return results

@@ -1,10 +1,12 @@
 """Tests for ksearch.cache module."""
 
+import json
 import tempfile
 import os
 import sqlite3
 import hashlib
 
+from ksearch.debug_logging import finish_debug_session, start_debug_session
 from ksearch.cache import CacheManager
 from ksearch.models import CacheEntry
 
@@ -290,3 +292,37 @@ def test_cache_manager_exact_match_loads_content_from_store_layer():
 
         assert len(results) == 1
         assert results[0].content == "# Article"
+
+
+def test_cache_manager_logs_save_and_lookup_events(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    db_path = os.path.join(tmp_path, "test.db")
+    store_dir = os.path.join(tmp_path, "store")
+
+    session = start_debug_session(
+        argv=["--debug", "search", "python"],
+        cwd="/work/tree",
+        command="search",
+    )
+
+    manager = CacheManager(db_path, store_dir)
+    manager.save(
+        url="https://example.com/article",
+        content="# Article Content\n\nThis is long enough to keep.",
+        keyword="python",
+        metadata={"title": "Article", "engine": "google"},
+    )
+    manager.exact_match("python")
+    manager.partial_match("python")
+    finish_debug_session(success=True, command="search", summary={"result_count": 1})
+
+    events = [
+        json.loads(line)
+        for line in (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    event_names = [event["event"] for event in events]
+
+    assert "cache_save" in event_names
+    assert "cache_exact_match" in event_names
+    assert "cache_partial_match" in event_names

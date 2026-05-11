@@ -4,6 +4,7 @@ from typing import Optional
 
 from ksearch.cache import CacheManager
 from ksearch.converter import ContentConverter
+from ksearch.debug_logging import log_event
 from ksearch.models import ResultEntry, SearchResult
 from ksearch.searxng import SearXNGClient
 
@@ -44,10 +45,18 @@ class SearchEngine:
         """Execute search with given keyword and options."""
         results = []
         cached_urls = set()
+        exact_count = 0
+        partial_count = 0
 
         if not options.get("no_cache", False):
             exact = self.cache.exact_match(keyword)
+            exact_count = len(exact)
             if exact:
+                log_event(
+                    "ksearch.search",
+                    "cache_lookup",
+                    {"keyword": keyword, "exact_count": exact_count, "partial_count": 0},
+                )
                 for entry in exact:
                     results.append(ResultEntry(
                         url=entry.url,
@@ -58,11 +67,26 @@ class SearchEngine:
                         source=entry.engine,
                         cached_date=entry.cached_date,
                     ))
+                log_event(
+                    "ksearch.search",
+                    "search_complete",
+                    {"keyword": keyword, "result_count": len(results), "source": "exact_cache"},
+                )
                 return results
 
             partial = self.cache.partial_match(
                 keyword,
                 time_range=options.get("time_range"),
+            )
+            partial_count = len(partial)
+            log_event(
+                "ksearch.search",
+                "cache_lookup",
+                {
+                    "keyword": keyword,
+                    "exact_count": exact_count,
+                    "partial_count": partial_count,
+                },
             )
             for entry in partial:
                 cached_urls.add(entry.url)
@@ -73,10 +97,25 @@ class SearchEngine:
                     file_path=entry.file_path,
                     cached=True,
                     source=entry.engine,
-                    cached_date=entry.cached_date,
-                ))
+                        cached_date=entry.cached_date,
+                    ))
+        else:
+            log_event(
+                "ksearch.search",
+                "cache_lookup",
+                {"keyword": keyword, "skipped": True},
+            )
 
         if not options.get("only_cache", False):
+            log_event(
+                "ksearch.search",
+                "network_search_start",
+                {
+                    "keyword": keyword,
+                    "time_range": options.get("time_range"),
+                    "max_results": options.get("max_results", 10),
+                },
+            )
             network_results = self.searxng.search(
                 query=keyword,
                 time_range=options.get("time_range"),
@@ -86,6 +125,17 @@ class SearchEngine:
             new_results = [r for r in network_results if r.url not in cached_urls]
             if new_results:
                 filtered_results = [r for r in new_results if not should_skip_url(r.url)]
+                log_event(
+                    "ksearch.search",
+                    "network_search_results",
+                    {
+                        "keyword": keyword,
+                        "raw_count": len(network_results),
+                        "deduped_count": len(new_results),
+                        "skipped_count": len(new_results) - len(filtered_results),
+                        "candidate_count": len(filtered_results),
+                    },
+                )
                 if filtered_results:
                     converted_entries = self._convert_and_store(
                         filtered_results,
@@ -93,7 +143,29 @@ class SearchEngine:
                         timeout=options.get("timeout", 30),
                     )
                     results.extend(converted_entries)
+            else:
+                log_event(
+                    "ksearch.search",
+                    "network_search_results",
+                    {
+                        "keyword": keyword,
+                        "raw_count": len(network_results),
+                        "deduped_count": 0,
+                        "skipped_count": 0,
+                        "candidate_count": 0,
+                    },
+                )
 
+        log_event(
+            "ksearch.search",
+            "search_complete",
+            {
+                "keyword": keyword,
+                "result_count": len(results),
+                "cached_count": partial_count + exact_count,
+                "network_count": len([entry for entry in results if not entry.cached]),
+            },
+        )
         return results
 
     def _convert_and_store(
@@ -112,6 +184,15 @@ class SearchEngine:
             except Exception:
                 continue
 
+        log_event(
+            "ksearch.search",
+            "conversion_complete",
+            {
+                "keyword": keyword,
+                "requested_count": len(results),
+                "stored_count": len(entries),
+            },
+        )
         return entries
 
     def _process_result(

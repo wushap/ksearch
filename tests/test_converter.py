@@ -1,7 +1,9 @@
 """Tests for ksearch.converter module."""
 
+import json
 from unittest.mock import Mock, patch
 
+from ksearch.debug_logging import finish_debug_session, start_debug_session
 from ksearch.converter import ContentConverter, clean_content
 from ksearch.web.extractor import ContentConverter as WebContentConverter
 from ksearch.web.url_policy import should_skip_url
@@ -170,3 +172,75 @@ Post Your Answer
     assert "## 9 Comments" not in cleaned
     assert "Add a comment" not in cleaned
     assert "Post Your Answer" not in cleaned
+
+
+def test_convert_url_logs_main_extraction_event(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    response = Mock()
+    response.text = "<html><body><article><h1>Title</h1><p>Main content only.</p></article></body></html>"
+    response.raise_for_status = Mock()
+
+    session = start_debug_session(
+        argv=["--debug", "search", "python"],
+        cwd="/work/tree",
+        command="search",
+    )
+
+    with patch("ksearch.web.extractor.requests.get", return_value=response), patch(
+        "ksearch.web.extractor.trafilatura_extract",
+        return_value="# Title\n\nMain content only with enough detail to pass the length threshold.",
+    ), patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
+        mock_md = Mock()
+        mock_md_class.return_value = mock_md
+
+        converter = ContentConverter()
+        result = converter.convert_url("https://example.com/article")
+        finish_debug_session(success=True, command="search", summary={"result_length": len(result)})
+
+    events = [
+        json.loads(line)
+        for line in (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    extraction_events = [event for event in events if event["event"] == "main_content_extracted"]
+
+    assert extraction_events
+    assert extraction_events[-1]["data"]["content_preview"].startswith("# Title")
+
+
+def test_convert_url_logs_markitdown_fallback_event(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    response = Mock()
+    response.text = "<html><body>Fallback page</body></html>"
+    response.raise_for_status = Mock()
+
+    mock_result = Mock()
+    mock_result.text_content = "# Converted Content\n\nThis is markdown content that should be preserved after cleaning."
+
+    session = start_debug_session(
+        argv=["--debug", "search", "python"],
+        cwd="/work/tree",
+        command="search",
+    )
+
+    with patch("ksearch.web.extractor.requests.get", return_value=response), patch(
+        "ksearch.web.extractor.trafilatura_extract",
+        return_value="too short",
+    ), patch("ksearch.web.extractor.MarkItDown") as mock_md_class:
+        mock_md = Mock()
+        mock_md.convert.return_value = mock_result
+        mock_md_class.return_value = mock_md
+
+        converter = ContentConverter()
+        result = converter.convert_url("https://example.com/article")
+        finish_debug_session(success=True, command="search", summary={"result_length": len(result)})
+
+    events = [
+        json.loads(line)
+        for line in (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    event_names = [event["event"] for event in events]
+
+    assert "main_content_short" in event_names
+    assert "markitdown_converted" in event_names

@@ -1,8 +1,10 @@
 """Tests for ksearch.searxng module."""
 
+import json
 import pytest
 from unittest.mock import Mock, patch
 
+from ksearch.debug_logging import finish_debug_session, start_debug_session
 from ksearch.searxng import SearXNGClient
 from ksearch.models import SearchResult
 from ksearch.web.search_client import SearXNGClient as WebSearXNGClient
@@ -81,3 +83,40 @@ def test_searxng_client_search_connection_error():
 
         with pytest.raises(Exception):
             client.search("test query")
+
+
+def test_searxng_client_logs_request_and_response_events(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "results": [
+            {
+                "url": "https://example.com/article",
+                "title": "Example Article",
+                "content": "Article snippet",
+                "engine": "google",
+                "publishedDate": None,
+            }
+        ]
+    }
+
+    with patch("requests.get", return_value=mock_response):
+        session = start_debug_session(
+            argv=["--debug", "search", "python"],
+            cwd="/work/tree",
+            command="search",
+        )
+        client = SearXNGClient("http://localhost:48888")
+        results = client.search("python", time_range="week", max_results=5)
+        finish_debug_session(success=True, command="search", summary={"result_count": len(results)})
+
+    events = [
+        json.loads(line)
+        for line in (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    event_names = [event["event"] for event in events]
+
+    assert "request_start" in event_names
+    assert "response_received" in event_names
