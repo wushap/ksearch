@@ -43,12 +43,18 @@ def _root_argv(ctx: typer.Context) -> list[str]:
     return list(ctx.meta.get("raw_argv", sys.argv[1:]))
 
 
-def _set_debug_command(ctx: typer.Context, command: str) -> None:
-    session = ctx.obj.get("debug_session")
-    if session is None:
-        return
-    session.command = command
-    write_context({})
+def _root_command(argv: list[str]) -> str:
+    tokens = [token for token in argv if token != "--debug"]
+    if not tokens:
+        return ""
+
+    command = tokens[0]
+    if command == "kbase":
+        for token in tokens[1:]:
+            if token.startswith("-"):
+                continue
+            return f"{command} {token}"
+    return command
 
 
 @app.callback()
@@ -66,10 +72,11 @@ def root_callback(
         return
 
     argv = _root_argv(ctx)
+    command = _root_command(argv)
     session = start_debug_session(
         argv=argv,
         cwd=os.getcwd(),
-        command=ctx.invoked_subcommand or "",
+        command=command,
     )
     ctx.obj["debug_session"] = session
     ctx.call_on_close(
@@ -80,14 +87,6 @@ def root_callback(
     )
     write_context({"python_version": sys.version, "debug_dir": str(session.debug_dir)})
     log_event("ksearch.__main__", "cli_bootstrap", {"argv": argv})
-
-
-@kbase_app.callback()
-def kbase_callback(ctx: typer.Context):
-    if ctx.obj is None:
-        return
-    if ctx.invoked_subcommand:
-        _set_debug_command(ctx, f"kbase {ctx.invoked_subcommand}")
 
 
 register_search_command(app)
