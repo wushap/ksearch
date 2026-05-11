@@ -101,3 +101,54 @@ def test_search_debug_logs_failure_result_with_error_message(monkeypatch, tmp_pa
 
     assert result_payload["success"] is False
     assert result_payload["error"]["message"] == "iterative backend failed"
+
+
+def test_search_debug_logs_dependency_construction_failures(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("ksearch.cli.search.CacheManager", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cache boom")))
+
+    result = runner.invoke(app, ["--debug", "search", "asyncio"])
+
+    assert result.exit_code == 1
+
+    session_dir = _debug_session_dir(tmp_path)
+    result_payload = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
+
+    assert result_payload["success"] is False
+    assert result_payload["error"]["message"] == "cache boom"
+
+
+def test_search_debug_surfaces_non_iterative_backend_failures(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("ksearch.cli.search.CacheManager", _StubDependency)
+    monkeypatch.setattr("ksearch.cli.search.SearXNGClient", _StubDependency)
+    monkeypatch.setattr("ksearch.cli.search.ContentConverter", _StubDependency)
+    monkeypatch.setattr("ksearch.cli.search.format_markdown", lambda results, keyword: f"{keyword}:{len(results)}")
+
+    class FakeKBase:
+        def search(self, *args, **kwargs):
+            raise RuntimeError("kbase unavailable")
+
+    class FailingSearchEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def search(self, keyword, config):
+            raise RuntimeError("web unavailable")
+
+    monkeypatch.setattr("ksearch.cli.search.build_kbase", lambda config: FakeKBase())
+    monkeypatch.setattr("ksearch.cli.search.SearchEngine", FailingSearchEngine)
+
+    result = runner.invoke(app, ["--debug", "search", "asyncio", "--no-iterative"])
+
+    assert result.exit_code == 0
+
+    session_dir = _debug_session_dir(tmp_path)
+    context_payload = json.loads((session_dir / "context.json").read_text(encoding="utf-8"))
+    result_payload = json.loads((session_dir / "result.json").read_text(encoding="utf-8"))
+
+    assert context_payload["backend_failures"] == [
+        {"component": "kbase", "message": "kbase unavailable"},
+        {"component": "web", "message": "web unavailable"},
+    ]
+    assert result_payload["summary"]["backend_failures"] == context_payload["backend_failures"]

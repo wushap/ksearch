@@ -94,81 +94,101 @@ def register_search_command(app: typer.Typer) -> None:
             },
         )
 
-        cache = CacheManager(config["index_db"], config["store_dir"])
-        searxng = SearXNGClient(config["searxng_url"], config["timeout"])
-        converter = ContentConverter(config["timeout"])
-        engine = SearchEngine(cache, searxng, converter)
+        try:
+            cache = CacheManager(config["index_db"], config["store_dir"])
+            searxng = SearXNGClient(config["searxng_url"], config["timeout"])
+            converter = ContentConverter(config["timeout"])
+            engine = SearchEngine(cache, searxng, converter)
 
-        if verbose:
-            console.print(Panel(f"Searching: {keyword}", title="ksearch"))
+            if verbose:
+                console.print(Panel(f"Searching: {keyword}", title="ksearch"))
 
-        iterative_enabled = config.get("iterative_enabled") and not config.get("only_cache", False) and not config.get("only_kbase", False)
+            iterative_enabled = config.get("iterative_enabled") and not config.get("only_cache", False) and not config.get("only_kbase", False)
+            backend_failures = []
 
-        if iterative_enabled:
-            kbase_mode_value = config.get("kbase_mode")
-            if not kbase_mode_value or kbase_mode_value == "none":
-                message = "Iterative search requires --kbase mode (chroma or qdrant)"
-                console.print(f"[red]{message}[/red]")
-                log_command_failure(
-                    "ksearch.cli.search",
-                    error=message,
-                    summary={"keyword": keyword, "iterative_enabled": iterative_enabled},
-                )
-                raise typer.Exit(1)
-            try:
-                kbase = build_kbase(config)
-                iterative_engine = IterativeSearchEngine(kbase, searxng, converter, cache, config)
-                all_results = iterative_engine.search(keyword)
-                if verbose:
-                    console.print(f"[green]✓[/green] Iterative search: {len(all_results)} results")
-            except Exception as exc:
-                console.print(f"[red]Iterative search error: {exc}[/red]")
-                log_command_failure(
-                    "ksearch.cli.search",
-                    error=exc,
-                    summary={"keyword": keyword, "iterative_enabled": iterative_enabled},
-                )
-                raise typer.Exit(1)
-        else:
-            all_results = []
-            kbase_mode_value = config.get("kbase_mode")
-            if kbase_mode_value and kbase_mode_value != "none":
+            if iterative_enabled:
+                kbase_mode_value = config.get("kbase_mode")
+                if not kbase_mode_value or kbase_mode_value == "none":
+                    message = "Iterative search requires --kbase mode (chroma or qdrant)"
+                    console.print(f"[red]{message}[/red]")
+                    log_command_failure(
+                        "ksearch.cli.search",
+                        error=message,
+                        summary={"keyword": keyword, "iterative_enabled": iterative_enabled},
+                    )
+                    raise typer.Exit(1)
                 try:
                     kbase = build_kbase(config)
-                    kbase_results = kbase.search(keyword, top_k=config.get("kbase_top_k", 5))
-                    if kbase_results and verbose:
-                        console.print(f"[cyan]kbase: {len(kbase_results)} results[/cyan]")
-                    all_results.extend(kbase_results_to_entries(kbase_results))
-                except Exception as exc:
+                    iterative_engine = IterativeSearchEngine(kbase, searxng, converter, cache, config)
+                    all_results = iterative_engine.search(keyword)
                     if verbose:
-                        console.print(f"[yellow]kbase search failed: {exc}[/yellow]")
-
-            if not config.get("only_kbase", False):
-                try:
-                    web_results = engine.search(keyword, config)
-                    if web_results and verbose:
-                        console.print(f"[cyan]Web: {len(web_results)} results[/cyan]")
-                    all_results.extend(web_results)
+                        console.print(f"[green]✓[/green] Iterative search: {len(all_results)} results")
                 except Exception as exc:
-                    if verbose:
-                        console.print(f"[red]Web search error: {exc}[/red]")
+                    console.print(f"[red]Iterative search error: {exc}[/red]")
+                    log_command_failure(
+                        "ksearch.cli.search",
+                        error=exc,
+                        summary={"keyword": keyword, "iterative_enabled": iterative_enabled},
+                    )
+                    raise typer.Exit(1)
+            else:
+                all_results = []
+                kbase_mode_value = config.get("kbase_mode")
+                if kbase_mode_value and kbase_mode_value != "none":
+                    try:
+                        kbase = build_kbase(config)
+                        kbase_results = kbase.search(keyword, top_k=config.get("kbase_top_k", 5))
+                        if kbase_results and verbose:
+                            console.print(f"[cyan]kbase: {len(kbase_results)} results[/cyan]")
+                        all_results.extend(kbase_results_to_entries(kbase_results))
+                    except Exception as exc:
+                        backend_failures.append({"component": "kbase", "message": str(exc)})
+                        if verbose:
+                            console.print(f"[yellow]kbase search failed: {exc}[/yellow]")
 
-        output = format_paths(all_results) if config["format"] == "path" else format_markdown(all_results, keyword)
-        console.print(output)
+                if not config.get("only_kbase", False):
+                    try:
+                        web_results = engine.search(keyword, config)
+                        if web_results and verbose:
+                            console.print(f"[cyan]Web: {len(web_results)} results[/cyan]")
+                        all_results.extend(web_results)
+                    except Exception as exc:
+                        backend_failures.append({"component": "web", "message": str(exc)})
+                        if verbose:
+                            console.print(f"[red]Web search error: {exc}[/red]")
 
-        if verbose:
-            console.print(f"[green]✓[/green] Total: {len(all_results)} results")
+            output = format_paths(all_results) if config["format"] == "path" else format_markdown(all_results, keyword)
+            console.print(output)
 
-        log_command_success(
-            "ksearch.cli.search",
-            summary={
+            if verbose:
+                console.print(f"[green]✓[/green] Total: {len(all_results)} results")
+
+            summary = {
                 "keyword": keyword,
                 "result_count": len(all_results),
                 "iterative_enabled": iterative_enabled,
                 "kbase_mode": config.get("kbase_mode"),
                 "format": config["format"],
-            },
-        )
+            }
+            context_updates = None
+            if backend_failures:
+                summary["backend_failures"] = backend_failures
+                context_updates = {"backend_failures": backend_failures}
+
+            log_command_success(
+                "ksearch.cli.search",
+                summary=summary,
+                context_updates=context_updates,
+            )
+        except typer.Exit:
+            raise
+        except Exception as exc:
+            log_command_failure(
+                "ksearch.cli.search",
+                error=exc,
+                summary={"keyword": keyword},
+            )
+            raise
 
 
 __all__ = ["SearchEngine", "register_search_command"]
