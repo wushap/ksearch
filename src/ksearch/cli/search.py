@@ -9,6 +9,11 @@ from ksearch.cache import CacheManager
 from ksearch.cli_common import build_kbase, console, kbase_results_to_entries
 from ksearch.config import DEFAULT_CONFIG, load_config, merge_config
 from ksearch.converter import ContentConverter
+from ksearch.debug_logging import (
+    log_command_failure,
+    log_command_start,
+    log_command_success,
+)
 from ksearch.iterative_flow.engine import IterativeSearchEngine
 from ksearch.output import format_markdown, format_paths
 from ksearch.search import SearchEngine
@@ -75,6 +80,19 @@ def register_search_command(app: typer.Typer) -> None:
                 cli_args[key] = value
 
         config = merge_config(cli_args, file_config, DEFAULT_CONFIG)
+        log_command_start(
+            "ksearch.cli.search",
+            config_snapshot=config,
+            command_context={
+                "keyword": keyword,
+                "format": config["format"],
+                "verbose": verbose,
+                "no_cache": config.get("no_cache", False),
+                "only_cache": config.get("only_cache", False),
+                "only_kbase": config.get("only_kbase", False),
+                "kbase_mode": config.get("kbase_mode"),
+            },
+        )
 
         cache = CacheManager(config["index_db"], config["store_dir"])
         searxng = SearXNGClient(config["searxng_url"], config["timeout"])
@@ -89,7 +107,13 @@ def register_search_command(app: typer.Typer) -> None:
         if iterative_enabled:
             kbase_mode_value = config.get("kbase_mode")
             if not kbase_mode_value or kbase_mode_value == "none":
-                console.print("[red]Iterative search requires --kbase mode (chroma or qdrant)[/red]")
+                message = "Iterative search requires --kbase mode (chroma or qdrant)"
+                console.print(f"[red]{message}[/red]")
+                log_command_failure(
+                    "ksearch.cli.search",
+                    error=message,
+                    summary={"keyword": keyword, "iterative_enabled": iterative_enabled},
+                )
                 raise typer.Exit(1)
             try:
                 kbase = build_kbase(config)
@@ -99,6 +123,11 @@ def register_search_command(app: typer.Typer) -> None:
                     console.print(f"[green]✓[/green] Iterative search: {len(all_results)} results")
             except Exception as exc:
                 console.print(f"[red]Iterative search error: {exc}[/red]")
+                log_command_failure(
+                    "ksearch.cli.search",
+                    error=exc,
+                    summary={"keyword": keyword, "iterative_enabled": iterative_enabled},
+                )
                 raise typer.Exit(1)
         else:
             all_results = []
@@ -129,6 +158,17 @@ def register_search_command(app: typer.Typer) -> None:
 
         if verbose:
             console.print(f"[green]✓[/green] Total: {len(all_results)} results")
+
+        log_command_success(
+            "ksearch.cli.search",
+            summary={
+                "keyword": keyword,
+                "result_count": len(all_results),
+                "iterative_enabled": iterative_enabled,
+                "kbase_mode": config.get("kbase_mode"),
+                "format": config["format"],
+            },
+        )
 
 
 __all__ = ["SearchEngine", "register_search_command"]

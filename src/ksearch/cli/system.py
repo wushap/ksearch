@@ -9,6 +9,11 @@ from rich.table import Table
 from ksearch.cache import CacheManager
 from ksearch.cli_common import build_stats_table, console, format_size
 from ksearch.config import expand_path, init_default_config, load_config
+from ksearch.debug_logging import (
+    log_command_failure,
+    log_command_start,
+    log_command_success,
+)
 from ksearch.embeddings import EmbeddingGenerator
 from ksearch.kbase import KnowledgeBase
 
@@ -26,49 +31,79 @@ def register_stats_command(app: typer.Typer) -> None:
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
     ):
         """Show unified cache and kbase statistics."""
-        cache = CacheManager(expand_path(index_db), expand_path(store_dir))
-        cache_stats = cache.stats()
-
-        kbase = KnowledgeBase(
-            mode=kbase_mode,
-            persist_dir=kbase_dir,
-            qdrant_url=qdrant_url if kbase_mode == "qdrant" else None,
-            embedding_model=embedding_model,
-            embedding_dimension=embedding_dimension,
-            ollama_url=ollama_url,
+        log_command_start(
+            "ksearch.cli.stats",
+            config_snapshot={
+                "store_dir": store_dir,
+                "index_db": index_db,
+                "kbase_mode": kbase_mode,
+                "kbase_dir": kbase_dir,
+                "qdrant_url": qdrant_url,
+                "embedding_model": embedding_model,
+                "embedding_dimension": embedding_dimension,
+                "ollama_url": ollama_url,
+            },
+            command_context={"subcommand": "stats"},
         )
-        kbase_stats = kbase.stats()
+        try:
+            cache = CacheManager(expand_path(index_db), expand_path(store_dir))
+            cache_stats = cache.stats()
 
-        overview_rows = [
-            ("Cache entries", str(cache_stats.get("total_entries", 0))),
-            ("kbase entries", str(kbase_stats.get("total_entries", 0))),
-            ("Total knowledge items", str(cache_stats.get("total_entries", 0) + kbase_stats.get("total_entries", 0))),
-            ("Keyword variety", str(cache_stats.get("keyword_count", 0))),
-            ("kbase source files", str(kbase_stats.get("source_file_count", 0))),
-            ("Total size", format_size(cache_stats.get("total_size_bytes", 0) + kbase_stats.get("total_size_bytes", 0))),
-        ]
-        console.print(build_stats_table("Overview", overview_rows))
+            kbase = KnowledgeBase(
+                mode=kbase_mode,
+                persist_dir=kbase_dir,
+                qdrant_url=qdrant_url if kbase_mode == "qdrant" else None,
+                embedding_model=embedding_model,
+                embedding_dimension=embedding_dimension,
+                ollama_url=ollama_url,
+            )
+            kbase_stats = kbase.stats()
 
-        cache_rows = [
-            ("Entries", str(cache_stats.get("total_entries", 0))),
-            ("Keyword count", str(cache_stats.get("keyword_count", 0))),
-            ("Total size", format_size(cache_stats.get("total_size_bytes", 0))),
-            ("Missing files", str(cache_stats.get("missing_files", 0))),
-            ("Top domains", ", ".join(f"{name}:{count}" for name, count in list(cache_stats.get("domains", {}).items())[:5]) or "N/A"),
-            ("Engines", ", ".join(f"{name}:{count}" for name, count in list(cache_stats.get("engines", {}).items())[:5]) or "N/A"),
-        ]
-        console.print(build_stats_table("Cache Stats", cache_rows))
+            overview_rows = [
+                ("Cache entries", str(cache_stats.get("total_entries", 0))),
+                ("kbase entries", str(kbase_stats.get("total_entries", 0))),
+                ("Total knowledge items", str(cache_stats.get("total_entries", 0) + kbase_stats.get("total_entries", 0))),
+                ("Keyword variety", str(cache_stats.get("keyword_count", 0))),
+                ("kbase source files", str(kbase_stats.get("source_file_count", 0))),
+                ("Total size", format_size(cache_stats.get("total_size_bytes", 0) + kbase_stats.get("total_size_bytes", 0))),
+            ]
+            console.print(build_stats_table("Overview", overview_rows))
 
-        kbase_rows = [
-            ("Entries", str(kbase_stats.get("total_entries", 0))),
-            ("Source files", str(kbase_stats.get("source_file_count", 0))),
-            ("Total size", format_size(kbase_stats.get("total_size_bytes", 0))),
-            ("Mode", kbase_stats.get("mode", "unknown")),
-            ("Embedding model", kbase_stats.get("embedding_model", "unknown")),
-            ("Embedding dimension", str(kbase_stats.get("embedding_dimension", "unknown"))),
-            ("Sources", ", ".join(f"{name}:{count}" for name, count in list(kbase_stats.get("sources", {}).items())[:5]) or "N/A"),
-        ]
-        console.print(build_stats_table("kbase stats", kbase_rows))
+            cache_rows = [
+                ("Entries", str(cache_stats.get("total_entries", 0))),
+                ("Keyword count", str(cache_stats.get("keyword_count", 0))),
+                ("Total size", format_size(cache_stats.get("total_size_bytes", 0))),
+                ("Missing files", str(cache_stats.get("missing_files", 0))),
+                ("Top domains", ", ".join(f"{name}:{count}" for name, count in list(cache_stats.get("domains", {}).items())[:5]) or "N/A"),
+                ("Engines", ", ".join(f"{name}:{count}" for name, count in list(cache_stats.get("engines", {}).items())[:5]) or "N/A"),
+            ]
+            console.print(build_stats_table("Cache Stats", cache_rows))
+
+            kbase_rows = [
+                ("Entries", str(kbase_stats.get("total_entries", 0))),
+                ("Source files", str(kbase_stats.get("source_file_count", 0))),
+                ("Total size", format_size(kbase_stats.get("total_size_bytes", 0))),
+                ("Mode", kbase_stats.get("mode", "unknown")),
+                ("Embedding model", kbase_stats.get("embedding_model", "unknown")),
+                ("Embedding dimension", str(kbase_stats.get("embedding_dimension", "unknown"))),
+                ("Sources", ", ".join(f"{name}:{count}" for name, count in list(kbase_stats.get("sources", {}).items())[:5]) or "N/A"),
+            ]
+            console.print(build_stats_table("kbase stats", kbase_rows))
+            log_command_success(
+                "ksearch.cli.stats",
+                summary={
+                    "subcommand": "stats",
+                    "cache_entries": cache_stats.get("total_entries", 0),
+                    "kbase_entries": kbase_stats.get("total_entries", 0),
+                },
+            )
+        except Exception as exc:
+            log_command_failure(
+                "ksearch.cli.stats",
+                error=exc,
+                summary={"subcommand": "stats"},
+            )
+            raise
 
 
 def register_config_command(app: typer.Typer) -> None:
@@ -85,47 +120,91 @@ def register_config_command(app: typer.Typer) -> None:
     ):
         """Manage configuration."""
         config_path = expand_path("~/.ksearch/config.json")
+        log_command_start(
+            "ksearch.cli.config",
+            config_snapshot={
+                "config_path": config_path,
+                "searxng_url": searxng_url,
+                "kbase_mode": kbase_mode,
+                "kbase_dir": kbase_dir,
+                "embedding_model": embedding_model,
+                "embedding_dimension": embedding_dimension,
+                "ollama_url": ollama_url,
+            },
+            command_context={"subcommand": "config", "init": init, "show": show},
+        )
+        try:
+            if init:
+                init_default_config(config_path)
+                console.print(f"[green]✓[/green] Config initialized at {config_path}")
+                log_command_success(
+                    "ksearch.cli.config",
+                    summary={"subcommand": "config", "action": "init"},
+                )
+                return
 
-        if init:
-            init_default_config(config_path)
-            console.print(f"[green]✓[/green] Config initialized at {config_path}")
-            return
+            if show:
+                config = load_config(config_path)
+                table = Table(title="Current Configuration")
+                table.add_column("Key", style="cyan")
+                table.add_column("Value", style="green")
+                for key, value in config.items():
+                    table.add_row(key, str(value))
+                console.print(table)
+                log_command_success(
+                    "ksearch.cli.config",
+                    summary={
+                        "subcommand": "config",
+                        "action": "show",
+                        "key_count": len(config),
+                    },
+                )
+                return
 
-        if show:
-            config = load_config(config_path)
-            table = Table(title="Current Configuration")
-            table.add_column("Key", style="cyan")
-            table.add_column("Value", style="green")
-            for key, value in config.items():
-                table.add_row(key, str(value))
-            console.print(table)
-            return
+            config = {}
+            if os.path.exists(config_path):
+                with open(config_path, "r") as handle:
+                    config = json.load(handle)
 
-        config = {}
-        if os.path.exists(config_path):
-            with open(config_path, "r") as handle:
-                config = json.load(handle)
+            if searxng_url:
+                config["searxng_url"] = searxng_url
+            if kbase_mode:
+                config["kbase_mode"] = kbase_mode
+            if kbase_dir:
+                config["kbase_dir"] = kbase_dir
+            if embedding_model:
+                config["embedding_model"] = embedding_model
+            if embedding_dimension is not None:
+                config["embedding_dimension"] = embedding_dimension
+            if ollama_url:
+                config["ollama_url"] = ollama_url
 
-        if searxng_url:
-            config["searxng_url"] = searxng_url
-        if kbase_mode:
-            config["kbase_mode"] = kbase_mode
-        if kbase_dir:
-            config["kbase_dir"] = kbase_dir
-        if embedding_model:
-            config["embedding_model"] = embedding_model
-        if embedding_dimension is not None:
-            config["embedding_dimension"] = embedding_dimension
-        if ollama_url:
-            config["ollama_url"] = ollama_url
-
-        if config:
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w") as handle:
-                json.dump(config, handle, indent=2)
-            console.print(f"[green]✓[/green] Config updated at {config_path}")
-        else:
-            console.print("[yellow]No changes[/yellow]")
+            if config:
+                os.makedirs(os.path.dirname(config_path), exist_ok=True)
+                with open(config_path, "w") as handle:
+                    json.dump(config, handle, indent=2)
+                console.print(f"[green]✓[/green] Config updated at {config_path}")
+                log_command_success(
+                    "ksearch.cli.config",
+                    summary={
+                        "subcommand": "config",
+                        "action": "update",
+                        "key_count": len(config),
+                    },
+                )
+            else:
+                console.print("[yellow]No changes[/yellow]")
+                log_command_success(
+                    "ksearch.cli.config",
+                    summary={"subcommand": "config", "action": "noop"},
+                )
+        except Exception as exc:
+            log_command_failure(
+                "ksearch.cli.config",
+                error=exc,
+                summary={"subcommand": "config"},
+            )
+            raise
 
 
 def register_health_command(app: typer.Typer) -> None:
@@ -134,36 +213,60 @@ def register_health_command(app: typer.Typer) -> None:
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
     ):
         """Check health of all services."""
-        embedder = EmbeddingGenerator(ollama_url=ollama_url)
-        health = embedder.health_check()
-
-        table = Table(title="Service Health")
-        table.add_column("Service", style="cyan")
-        table.add_column("Status", style="green")
-        table.add_column("Details", style="dim")
-
-        status = "[green]✓[/green]" if health.get("ollama") else "[red]✗[/red]"
-        details = ""
-        if health.get("ollama_models"):
-            details = f"Models: {', '.join(health['ollama_models'][:3])}"
-        if health.get("ollama_error"):
-            details = health["ollama_error"]
-        table.add_row("Ollama", status, details)
-
-        status = "[green]✓[/green]" if health.get("sentence_transformers") else "[red]✗[/red]"
-        table.add_row("Sentence Transformers", status, "Local fallback")
-        table.add_row("Simple Embedder", "[green]✓[/green]", "Always available")
-
+        log_command_start(
+            "ksearch.cli.health",
+            config_snapshot={"ollama_url": ollama_url},
+            command_context={"subcommand": "health"},
+        )
         try:
-            import requests
+            embedder = EmbeddingGenerator(ollama_url=ollama_url)
+            health = embedder.health_check()
 
-            response = requests.get("http://localhost:48888/search?q=test&format=json", timeout=5)
-            status = "[green]✓[/green]" if response.status_code == 200 else "[red]✗[/red]"
-            table.add_row("SearXNG", status, "http://localhost:48888")
+            table = Table(title="Service Health")
+            table.add_column("Service", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Details", style="dim")
+
+            status = "[green]✓[/green]" if health.get("ollama") else "[red]✗[/red]"
+            details = ""
+            if health.get("ollama_models"):
+                details = f"Models: {', '.join(health['ollama_models'][:3])}"
+            if health.get("ollama_error"):
+                details = health["ollama_error"]
+            table.add_row("Ollama", status, details)
+
+            status = "[green]✓[/green]" if health.get("sentence_transformers") else "[red]✗[/red]"
+            table.add_row("Sentence Transformers", status, "Local fallback")
+            table.add_row("Simple Embedder", "[green]✓[/green]", "Always available")
+
+            searxng_ok = False
+            try:
+                import requests
+
+                response = requests.get("http://localhost:48888/search?q=test&format=json", timeout=5)
+                searxng_ok = response.status_code == 200
+                status = "[green]✓[/green]" if searxng_ok else "[red]✗[/red]"
+                table.add_row("SearXNG", status, "http://localhost:48888")
+            except Exception as exc:
+                table.add_row("SearXNG", "[red]✗[/red]", str(exc)[:30])
+
+            console.print(table)
+            log_command_success(
+                "ksearch.cli.health",
+                summary={
+                    "subcommand": "health",
+                    "ollama": bool(health.get("ollama")),
+                    "sentence_transformers": bool(health.get("sentence_transformers")),
+                    "searxng": searxng_ok,
+                },
+            )
         except Exception as exc:
-            table.add_row("SearXNG", "[red]✗[/red]", str(exc)[:30])
-
-        console.print(table)
+            log_command_failure(
+                "ksearch.cli.health",
+                error=exc,
+                summary={"subcommand": "health"},
+            )
+            raise
 
 
 __all__ = [

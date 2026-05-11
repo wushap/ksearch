@@ -104,6 +104,36 @@ def _close_logger(logger: logging.Logger) -> None:
         logger.removeHandler(handler)
 
 
+def _active_session() -> DebugSession | None:
+    session = _SESSION.get()
+    if session is None or session.finished:
+        return None
+    return session
+
+
+def _error_payload(error: Any) -> dict[str, Any]:
+    if isinstance(error, dict):
+        return _sanitize(error)
+
+    if isinstance(error, BaseException):
+        payload = {"type": error.__class__.__name__}
+        message = str(error)
+        if message:
+            payload["message"] = message
+
+        exit_code = getattr(error, "exit_code", None)
+        if exit_code is None:
+            exit_code = getattr(error, "code", None)
+        if exit_code is not None:
+            payload["exit_code"] = exit_code
+        return payload
+
+    if error is None:
+        return {}
+
+    return {"message": str(error)}
+
+
 def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSession:
     active_session = _SESSION.get()
     if active_session is not None and not active_session.finished:
@@ -139,8 +169,8 @@ def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSess
 
 
 def write_context(payload: dict[str, Any]) -> None:
-    session = _SESSION.get()
-    if session is None or session.finished:
+    session = _active_session()
+    if session is None:
         return
     session.context = _merge_dicts(
         session.context,
@@ -163,8 +193,8 @@ def log_event(
     data: dict[str, Any] | None = None,
     level: str = "DEBUG",
 ) -> None:
-    session = _SESSION.get()
-    if session is None or session.finished:
+    session = _active_session()
+    if session is None:
         return
     sanitized = _sanitize(data or {})
     payload = {
@@ -180,6 +210,57 @@ def log_event(
     session.logger.log(getattr(logging, level), f"{component} {event} {sanitized}")
 
 
+def _command_component(command: str) -> str:
+    normalized = command.replace(" ", ".")
+    return f"ksearch.cli.{normalized}"
+
+
+def _component_command(component: str) -> str:
+    prefix = "ksearch.cli."
+    if component.startswith(prefix):
+        component = component[len(prefix) :]
+    return component.replace(".", " ")
+
+
+def begin_command(
+    command: str,
+    args: dict[str, Any],
+    config_snapshot: dict[str, Any] | None = None,
+) -> None:
+    session = _active_session()
+    if session is None:
+        return
+
+    session.command = command
+    context = {"command_context": args}
+    if config_snapshot is not None:
+        context["config_snapshot"] = config_snapshot
+    write_context(context)
+    log_event(_command_component(command), "command_start", {"args": args}, level="INFO")
+
+
+def complete_command(command: str, summary: dict[str, Any]) -> None:
+    session = _active_session()
+    if session is not None:
+        session.command = command
+    log_event(_command_component(command), "command_success", summary, level="INFO")
+    finish_debug_session(success=True, command=command, summary=summary)
+
+
+def fail_command(
+    command: str,
+    exc: Exception,
+    summary: dict[str, Any] | None = None,
+) -> None:
+    session = _active_session()
+    if session is not None:
+        session.command = command
+
+    error = _error_payload(exc)
+    log_event(_command_component(command), "command_failure", error, level="ERROR")
+    finish_debug_session(success=False, command=command, summary=summary or {}, error=error)
+
+
 def finish_debug_session(
     *,
     success: bool,
@@ -187,8 +268,8 @@ def finish_debug_session(
     summary: dict[str, Any] | None = None,
     error: dict[str, Any] | None = None,
 ) -> None:
-    session = _SESSION.get()
-    if session is None or session.finished:
+    session = _active_session()
+    if session is None:
         return
     session.finished = True
     payload = {
@@ -207,3 +288,43 @@ def finish_debug_session(
     finally:
         _close_logger(session.logger)
         _SESSION.set(None)
+
+
+def log_command_start(
+    component: str,
+    *,
+    config_snapshot: dict[str, Any] | None = None,
+    command_context: dict[str, Any] | None = None,
+) -> None:
+    begin_command(
+        _component_command(component),
+        command_context or {},
+        config_snapshot=config_snapshot,
+    )
+
+
+def log_command_success(
+    component: str,
+    *,
+    summary: dict[str, Any] | None = None,
+    context_updates: dict[str, Any] | None = None,
+) -> None:
+    if context_updates:
+        write_context(context_updates)
+    complete_command(_component_command(component), summary or {})
+
+
+def log_command_failure(
+    component: str,
+    *,
+    error: Any,
+    summary: dict[str, Any] | None = None,
+    context_updates: dict[str, Any] | None = None,
+) -> None:
+    if context_updates:
+        write_context(context_updates)
+    if isinstance(error, BaseException):
+        exc = error
+    else:
+        exc = RuntimeError(str(error))
+    fail_command(_component_command(component), exc, summary=summary)
