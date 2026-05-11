@@ -2,7 +2,7 @@
 
 import json
 import time
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -105,3 +105,14 @@ class TestContentOptimizer:
         aggregated = optimizer._aggregate_content(results)
         assert "content A" in aggregated
         assert "content B" in aggregated
+
+    def test_optimize_logs_iteration_events(self):
+        optimizer = self._make_optimizer([
+            {"action": "COMPLETE", "confidence": 0.9, "gaps": [], "refinement_query": "", "summary": "Good"}
+        ])
+        search_fn = MagicMock(return_value=[_make_result("content")])
+
+        with patch("ksearch.content_optimization.optimizer.log_event") as log_event:
+            optimizer.optimize("test query", search_fn)
+
+        assert any(call.args[1] == "optimization_start" for call in log_event.call_args_list)

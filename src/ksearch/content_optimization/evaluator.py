@@ -3,6 +3,7 @@
 import json
 import logging
 
+from ksearch.debug_logging import log_event
 from ksearch.content_optimization.ollama_client import OllamaChatClient
 from ksearch.content_optimization.prompts import format_evaluation_prompt
 from ksearch.models import QualityAssessment
@@ -31,22 +32,52 @@ class QualityEvaluator:
             if action not in ("REFINE", "COMPLETE"):
                 logger.warning("Unexpected action from LLM: %s, defaulting to COMPLETE", action)
                 action = "COMPLETE"
-            return QualityAssessment(
+            assessment = QualityAssessment(
                 action=action,
                 confidence=float(data.get("confidence", 0.5)),
                 gaps=data.get("gaps", []),
                 refinement_query=data.get("refinement_query", ""),
                 summary=data.get("summary", ""),
             )
+            log_event(
+                "ksearch.content_optimization.evaluator",
+                "evaluation_completed",
+                {
+                    "query": query,
+                    "action": assessment.action,
+                    "confidence": assessment.confidence,
+                    "gap_count": len(assessment.gaps),
+                    "should_continue": self.should_continue(assessment),
+                },
+            )
+            return assessment
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
             logger.warning("Failed to parse evaluation response: %s", exc)
-            return QualityAssessment(
+            assessment = QualityAssessment(
                 action="COMPLETE",
                 confidence=0.5,
                 gaps=[],
                 refinement_query="",
                 summary=f"Evaluation parsing failed: {exc}",
             )
+            log_event(
+                "ksearch.content_optimization.evaluator",
+                "evaluation_parse_failed",
+                {"query": query, "message": str(exc)},
+                level="WARNING",
+            )
+            log_event(
+                "ksearch.content_optimization.evaluator",
+                "evaluation_completed",
+                {
+                    "query": query,
+                    "action": assessment.action,
+                    "confidence": assessment.confidence,
+                    "gap_count": len(assessment.gaps),
+                    "should_continue": self.should_continue(assessment),
+                },
+            )
+            return assessment
 
     def should_continue(self, assessment: QualityAssessment) -> bool:
         """Check if optimization should continue."""

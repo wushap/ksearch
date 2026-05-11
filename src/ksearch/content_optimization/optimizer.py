@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Callable
 
+from ksearch.debug_logging import log_event
 from ksearch.content_optimization.evaluator import QualityEvaluator
 from ksearch.content_optimization.ollama_client import OllamaChatClient
 from ksearch.content_optimization.prompts import format_synthesis_prompt
@@ -32,6 +33,11 @@ class ContentOptimizer:
         """Run iterative content optimization with search."""
         start_time = time.time()
         results = list(initial_results) if initial_results is not None else search_fn(query)
+        log_event(
+            "ksearch.content_optimization.optimizer",
+            "optimization_start",
+            {"query": query, "initial_result_count": len(results)},
+        )
         aggregated = self._aggregate_content(results)
         refinement_history = []
         assessment = QualityAssessment(
@@ -42,6 +48,12 @@ class ContentOptimizer:
         for iteration in range(1, self.max_iterations + 1):
             if time.time() - start_time > self.max_time_seconds:
                 logger.info("Optimization time limit reached at iteration %d", iteration)
+                log_event(
+                    "ksearch.content_optimization.optimizer",
+                    "optimization_stop",
+                    {"iteration": iteration, "reason": "time_limit"},
+                    level="WARNING",
+                )
                 break
 
             assessment = self.evaluator.evaluate(query, aggregated)
@@ -51,8 +63,23 @@ class ContentOptimizer:
                 "action": assessment.action,
                 "gaps": assessment.gaps,
             })
+            log_event(
+                "ksearch.content_optimization.optimizer",
+                "optimization_iteration",
+                {
+                    "iteration": iteration,
+                    "confidence": assessment.confidence,
+                    "action": assessment.action,
+                    "gaps": assessment.gaps,
+                },
+            )
 
             if not self.evaluator.should_continue(assessment):
+                log_event(
+                    "ksearch.content_optimization.optimizer",
+                    "optimization_stop",
+                    {"iteration": iteration, "reason": "assessment_complete"},
+                )
                 break
 
             refinement_query = assessment.refinement_query or query
@@ -61,6 +88,15 @@ class ContentOptimizer:
             aggregated = self._aggregate_content(results)
 
         final_content = self._synthesize(query, aggregated)
+        log_event(
+            "ksearch.content_optimization.optimizer",
+            "optimization_complete",
+            {
+                "iterations_used": len(refinement_history),
+                "action": assessment.action,
+                "confidence": assessment.confidence,
+            },
+        )
         return OptimizationResult(
             original_query=query,
             final_content=final_content,
@@ -73,6 +109,11 @@ class ContentOptimizer:
     def optimize_content(self, query: str, content: str) -> OptimizationResult:
         """Optimize existing content without re-searching."""
         start_time = time.time()
+        log_event(
+            "ksearch.content_optimization.optimizer",
+            "optimization_start",
+            {"query": query, "initial_result_count": 0},
+        )
         refinement_history = []
         assessment = QualityAssessment(
             action="COMPLETE", confidence=0.0, gaps=[], refinement_query="",
@@ -81,6 +122,12 @@ class ContentOptimizer:
 
         for iteration in range(1, self.max_iterations + 1):
             if time.time() - start_time > self.max_time_seconds:
+                log_event(
+                    "ksearch.content_optimization.optimizer",
+                    "optimization_stop",
+                    {"iteration": iteration, "reason": "time_limit"},
+                    level="WARNING",
+                )
                 break
 
             truncated = content[:MAX_CONTENT_CHARS]
@@ -91,11 +138,35 @@ class ContentOptimizer:
                 "action": assessment.action,
                 "gaps": assessment.gaps,
             })
+            log_event(
+                "ksearch.content_optimization.optimizer",
+                "optimization_iteration",
+                {
+                    "iteration": iteration,
+                    "confidence": assessment.confidence,
+                    "action": assessment.action,
+                    "gaps": assessment.gaps,
+                },
+            )
 
             if not self.evaluator.should_continue(assessment):
+                log_event(
+                    "ksearch.content_optimization.optimizer",
+                    "optimization_stop",
+                    {"iteration": iteration, "reason": "assessment_complete"},
+                )
                 break
 
         final_content = self._synthesize(query, content[:MAX_CONTENT_CHARS])
+        log_event(
+            "ksearch.content_optimization.optimizer",
+            "optimization_complete",
+            {
+                "iterations_used": len(refinement_history),
+                "action": assessment.action,
+                "confidence": assessment.confidence,
+            },
+        )
         return OptimizationResult(
             original_query=query,
             final_content=final_content,

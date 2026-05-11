@@ -519,6 +519,15 @@ class TestIterativeSearchEngine:
         assert all(r.source == "kbase" for r in results)
         engine.searxng.search.assert_not_called()
 
+    def test_search_logs_sufficiency_decision(self, engine):
+        kbase_results = [self.make_kbase_result(0.9, idx=i) for i in range(10)]
+        engine.kbase.search = Mock(return_value=kbase_results)
+
+        with patch("ksearch.iterative_flow.engine.log_event") as log_event:
+            engine.search("how to cancel asyncio tasks")
+
+        assert any(call.args[1] == "sufficiency_evaluated" for call in log_event.call_args_list)
+
     def test_search_optimizes_sufficient_kbase_results_when_enabled(self, engine):
         """Test optimization runs even when initial kbase results are already sufficient."""
         kbase_results = [self.make_kbase_result(0.9, idx=i) for i in range(10)]

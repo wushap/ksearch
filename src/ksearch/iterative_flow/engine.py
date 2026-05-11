@@ -5,6 +5,7 @@ import time
 
 from ksearch.cache import CacheManager
 from ksearch.converter import ContentConverter
+from ksearch.debug_logging import log_event
 from ksearch.iterative_flow.convergence import ConvergenceEvaluator, IterationBoundary
 from ksearch.iterative_flow.query import QueryClassifier
 from ksearch.iterative_flow.sufficiency import SufficiencyEvaluator
@@ -51,14 +52,34 @@ class IterativeSearchEngine:
         start_time = time.time()
         kbase_top_k = self.config.get("kbase_top_k", 10)
         max_results = self.config.get("max_results", 5)
+        log_event(
+            "ksearch.iterative_flow.engine",
+            "iterative_search_start",
+            {
+                "query": query,
+                "kbase_top_k": kbase_top_k,
+                "max_results": max_results,
+                "optimization_enabled": self.optimization_enabled,
+            },
+        )
 
         query_type = self.query_classifier.classify(query)
         threshold = self.sufficiency.get_threshold(query_type)
 
         kbase_results = self.kbase.search(query, top_k=kbase_top_k)
         score = self.sufficiency.score(kbase_results)
+        log_event(
+            "ksearch.iterative_flow.engine",
+            "sufficiency_evaluated",
+            {"score": score, "threshold": threshold, "iteration": 0},
+        )
         if self.sufficiency.is_sufficient(score, threshold):
             initial_results = self._convert_kbase_results(kbase_results)
+            log_event(
+                "ksearch.iterative_flow.engine",
+                "sufficient_kbase_results",
+                {"count": len(initial_results)},
+            )
             if self.optimization_enabled:
                 return self._optimize_results(query, initial_results)
             return initial_results
@@ -69,7 +90,17 @@ class IterativeSearchEngine:
         seen_web_urls = set()
 
         while not self.boundary.check_limits(iteration, time.time() - start_time):
+            log_event(
+                "ksearch.iterative_flow.engine",
+                "iteration_begin",
+                {"iteration": iteration + 1},
+            )
             web_urls = self.searxng.search(query, max_results=max_results)
+            log_event(
+                "ksearch.iterative_flow.engine",
+                "web_fallback_triggered",
+                {"iteration": iteration + 1, "web_result_count": len(web_urls)},
+            )
             ingested_any = False
 
             for url_result in web_urls:
@@ -115,24 +146,49 @@ class IterativeSearchEngine:
                 ))
 
             if not ingested_any:
+                log_event(
+                    "ksearch.iterative_flow.engine",
+                    "iteration_stop",
+                    {"iteration": iteration, "reason": "no_new_content"},
+                )
                 break
 
             iteration += 1
             current_results = self.kbase.search(query, top_k=kbase_top_k)
             score = self.sufficiency.score(current_results)
+            log_event(
+                "ksearch.iterative_flow.engine",
+                "sufficiency_evaluated",
+                {"score": score, "threshold": threshold, "iteration": iteration},
+            )
             if self.sufficiency.is_sufficient(score, threshold):
                 kbase_results = current_results
+                log_event(
+                    "ksearch.iterative_flow.engine",
+                    "iteration_stop",
+                    {"iteration": iteration, "reason": "sufficient"},
+                )
                 break
 
             convergence = self.convergence.check_convergence(prev_results, current_results)
             if convergence.is_converged:
                 kbase_results = current_results
+                log_event(
+                    "ksearch.iterative_flow.engine",
+                    "iteration_stop",
+                    {"iteration": iteration, "reason": "converged"},
+                )
                 break
 
             prev_results = current_results
             kbase_results = current_results
 
         combined = self._combine_results(kbase_results, all_web_entries)
+        log_event(
+            "ksearch.iterative_flow.engine",
+            "iterative_search_complete",
+            {"result_count": len(combined), "web_entry_count": len(all_web_entries)},
+        )
         if self.optimization_enabled:
             return self._optimize_results(query, combined)
         return combined
@@ -168,6 +224,12 @@ class IterativeSearchEngine:
         """Run content optimization on search results if enabled."""
         from ksearch.content_optimization import ContentOptimizer, OllamaChatClient, QualityEvaluator
 
+        log_event(
+            "ksearch.iterative_flow.engine",
+            "optimization_started",
+            {"query": query, "result_count": len(results)},
+        )
+
         try:
             client = OllamaChatClient(
                 model=self.config.get("optimization_model", "gemma4:e2b"),
@@ -191,8 +253,23 @@ class IterativeSearchEngine:
                     source=results[0].source,
                     cached_date=results[0].cached_date,
                 )
+            log_event(
+                "ksearch.iterative_flow.engine",
+                "optimization_applied",
+                {
+                    "query": query,
+                    "iterations_used": opt_result.iterations_used,
+                    "action": opt_result.quality.action,
+                },
+            )
         except Exception as exc:
             logger.warning("Iterative optimization failed: %s", exc)
+            log_event(
+                "ksearch.iterative_flow.engine",
+                "optimization_failed",
+                {"query": query, "message": str(exc)},
+                level="WARNING",
+            )
         return results
 
 

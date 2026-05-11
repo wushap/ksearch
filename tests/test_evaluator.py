@@ -1,7 +1,7 @@
 """Tests for QualityEvaluator."""
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -69,3 +69,23 @@ class TestQualityEvaluator:
             action="REFINE", confidence=0.85, gaps=["gap"], refinement_query="q", summary="s"
         )
         assert evaluator.should_continue(assessment) is False
+
+    def test_evaluate_logs_action_and_confidence(self):
+        response = {
+            "action": "REFINE",
+            "confidence": 0.6,
+            "gaps": ["missing pricing"],
+            "refinement_query": "pricing info",
+            "summary": "Incomplete",
+        }
+        evaluator = self._make_evaluator(response)
+
+        with patch("ksearch.content_optimization.evaluator.log_event") as log_event:
+            evaluator.evaluate("test query", "some content")
+
+        completion_calls = [call for call in log_event.call_args_list if call.args[1] == "evaluation_completed"]
+        assert completion_calls
+        payload = completion_calls[0].args[2]
+        assert payload["action"] == "REFINE"
+        assert payload["confidence"] == 0.6
+        assert payload["gap_count"] == 1

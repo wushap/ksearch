@@ -8,6 +8,8 @@ from typing import Optional
 
 import requests
 
+from ksearch.debug_logging import log_event
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,20 +49,62 @@ class ReRanker:
         if not documents:
             return []
 
+        log_event(
+            "ksearch.knowledge.reranker",
+            "rerank_start",
+            {
+                "query": query,
+                "document_count": len(documents),
+                "top_k": top_k,
+                "model": self.model_name,
+            },
+        )
+
         try:
-            score_map = {
-                index: self._score_document(query, doc.get("content", ""))
-                for index, doc in enumerate(documents)
-            }
+            score_map = {}
+            for index, doc in enumerate(documents):
+                content = doc.get("content", "")
+                score = self._score_document(query, content)
+                score_map[index] = score
+                log_event(
+                    "ksearch.knowledge.reranker",
+                    "rerank_score",
+                    {
+                        "index": index,
+                        "document_id": doc.get("id"),
+                        "score": score,
+                        "content_preview": content[: self.max_content_length],
+                    },
+                )
         except Exception as exc:
             logger.warning("Failed to rerank with Ollama model '%s': %s", self.model_name, exc)
+            log_event(
+                "ksearch.knowledge.reranker",
+                "rerank_failed",
+                {
+                    "query": query,
+                    "model": self.model_name,
+                    "message": str(exc),
+                },
+                level="WARNING",
+            )
             return documents[:top_k]
 
         for index, doc in enumerate(documents):
             doc["rerank_score"] = float(score_map.get(index, doc.get("score", 0.0)))
 
         reranked = sorted(documents, key=lambda d: d.get("rerank_score", 0.0), reverse=True)
-        return reranked[:top_k]
+        final_results = reranked[:top_k]
+        log_event(
+            "ksearch.knowledge.reranker",
+            "rerank_complete",
+            {
+                "query": query,
+                "returned_count": len(final_results),
+                "scored_count": len(score_map),
+            },
+        )
+        return final_results
 
     def _score_document(self, query: str, content: str) -> float:
         response = requests.post(

@@ -115,3 +115,22 @@ class TestReRanker:
             results = reranker.rerank("test", docs, top_k=1)
 
         assert len(results) == 1
+
+    def test_rerank_logs_scores_with_truncated_preview(self):
+        reranker = ReRanker(model_name="gemma4:e2b", ollama_url="http://localhost:11434")
+        docs = [{"id": "1", "content": "word " * 400, "score": 0.1}]
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"message": {"content": '{"score": 0.8}'}}
+
+        with patch("ksearch.knowledge.reranker.requests.post", return_value=response), patch(
+            "ksearch.knowledge.reranker.log_event"
+        ) as log_event:
+            reranker.rerank("asyncio cancellation", docs, top_k=1)
+
+        score_calls = [call for call in log_event.call_args_list if call.args[1] == "rerank_score"]
+        assert score_calls
+        payload = score_calls[0].args[2]
+        assert payload["score"] == 0.8
+        assert payload["document_id"] == "1"
+        assert len(payload["content_preview"]) == reranker.max_content_length
