@@ -1,5 +1,6 @@
 """Tests for ksearch CLI entry points."""
 
+import json
 import os
 import tempfile
 
@@ -16,6 +17,63 @@ def test_app_help_uses_ksearch_as_primary_name():
 
     assert result.exit_code == 0
     assert "ksearch" in result.output
+
+
+def test_root_debug_flag_creates_session_for_health(monkeypatch, tmp_path):
+    class FakeEmbedder:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def health_check(self):
+            return {
+                "ollama": False,
+                "ollama_error": "unavailable",
+                "sentence_transformers": True,
+                "ollama_models": [],
+            }
+
+    class FakeResponse:
+        status_code = 200
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("ksearch.cli_system.EmbeddingGenerator", FakeEmbedder)
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
+
+    result = runner.invoke(app, ["--debug", "health"])
+
+    sessions = sorted((tmp_path / ".ksearch" / "debug").glob("cli-*"))
+    assert result.exit_code == 0
+    assert len(sessions) == 1
+
+    context = json.loads((sessions[0] / "context.json").read_text(encoding="utf-8"))
+    assert context["argv"] == ["--debug", "health"]
+    assert context["command"] == "health"
+
+
+def test_root_without_debug_does_not_create_debug_directory(monkeypatch, tmp_path):
+    class FakeEmbedder:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def health_check(self):
+            return {
+                "ollama": False,
+                "ollama_error": "unavailable",
+                "sentence_transformers": True,
+                "ollama_models": [],
+            }
+
+    class FakeResponse:
+        status_code = 200
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("ksearch.cli_system.EmbeddingGenerator", FakeEmbedder)
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
+
+    result = runner.invoke(app, ["health"])
+
+    assert result.exit_code == 0
+    assert not (tmp_path / ".ksearch" / "debug").exists()
 
 
 def test_health_command_runs_without_name_error(monkeypatch):
