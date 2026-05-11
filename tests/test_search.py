@@ -204,3 +204,42 @@ def test_search_engine_logs_cache_and_network_events(tmp_path, monkeypatch):
     assert "network_search_start" in event_names
     assert "network_search_results" in event_names
     assert "conversion_complete" in event_names
+
+
+def test_search_engine_exact_cache_path_logs_final_counts(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    cache_entry = Mock()
+    cache_entry.url = "https://example.com/article"
+    cache_entry.title = "Cached"
+    cache_entry.content = "Cached content"
+    cache_entry.file_path = "/tmp/cached.md"
+    cache_entry.engine = "cache"
+    cache_entry.cached_date = "2026-05-11"
+
+    cache = Mock()
+    cache.exact_match.return_value = [cache_entry]
+    cache.partial_match.return_value = []
+
+    searxng = Mock(spec=SearXNGClient)
+    converter = Mock(spec=ContentConverter)
+
+    session = start_debug_session(
+        argv=["--debug", "search", "python"],
+        cwd="/work/tree",
+        command="search",
+    )
+
+    engine = SearchEngine(cache, searxng, converter)
+    results = engine.search("python", {"no_cache": False, "only_cache": False})
+    finish_debug_session(success=True, command="search", summary={"result_count": len(results)})
+
+    events = [
+        json.loads(line)
+        for line in (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    search_complete = [event for event in events if event["event"] == "search_complete"][-1]
+
+    assert search_complete["data"]["result_count"] == 1
+    assert search_complete["data"]["cached_count"] == 1
+    assert search_complete["data"]["network_count"] == 0

@@ -70,7 +70,13 @@ class SearchEngine:
                 log_event(
                     "ksearch.search",
                     "search_complete",
-                    {"keyword": keyword, "result_count": len(results), "source": "exact_cache"},
+                    {
+                        "keyword": keyword,
+                        "result_count": len(results),
+                        "cached_count": len(results),
+                        "network_count": 0,
+                        "source": "exact_cache",
+                    },
                 )
                 return results
 
