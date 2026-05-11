@@ -18,6 +18,7 @@ _PREVIEW_LIMITS = {
     "prompt_preview": 1000,
     "response_preview": 1000,
 }
+_RESERVED_CONTEXT_KEYS = {"argv", "command", "cwd", "started_at"}
 
 
 @dataclass
@@ -66,6 +67,10 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def _filter_reserved_context(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key not in _RESERVED_CONTEXT_KEYS}
+
+
 def _merge_dicts(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in updates.items():
@@ -108,7 +113,7 @@ def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSess
     try:
         session_logger = logging.getLogger(f"ksearch.debug.{debug_dir.name}")
         session_logger.setLevel(logging.DEBUG)
-        session_logger.handlers.clear()
+        _close_logger(session_logger)
         handler = logging.FileHandler(debug_dir / "session.log", encoding="utf-8")
         handler.setFormatter(
             logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -120,7 +125,7 @@ def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSess
         raise
 
     session = DebugSession(
-        argv=argv,
+        argv=list(argv),
         cwd=cwd,
         command=command,
         started_at=time.time(),
@@ -137,7 +142,10 @@ def write_context(payload: dict[str, Any]) -> None:
     session = _SESSION.get()
     if session is None or session.finished:
         return
-    session.context = _merge_dicts(session.context, _sanitize(payload))
+    session.context = _merge_dicts(
+        session.context,
+        _sanitize(_filter_reserved_context(payload)),
+    )
     context = {
         "argv": session.argv,
         "command": session.command,

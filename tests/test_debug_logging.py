@@ -122,6 +122,33 @@ def test_write_context_merges_nested_dictionaries(tmp_path, monkeypatch):
     }
 
 
+def test_write_context_does_not_override_reserved_session_metadata(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    session = start_debug_session(
+        argv=["--debug", "health"],
+        cwd="/work/tree",
+        command="health",
+    )
+    write_context(
+        {
+            "argv": ["--debug", "search"],
+            "command": "search",
+            "cwd": "/tmp/override",
+            "started_at": "1999-01-01T00:00:00",
+            "config_snapshot": {"ollama_url": "http://localhost:11434"},
+        }
+    )
+    finish_debug_session(success=True, command="health", summary={"result_count": 0})
+
+    context_payload = json.loads((session.debug_dir / "context.json").read_text(encoding="utf-8"))
+    assert context_payload["argv"] == ["--debug", "health"]
+    assert context_payload["command"] == "health"
+    assert context_payload["cwd"] == "/work/tree"
+    assert context_payload["started_at"] == session.started_at_iso
+    assert context_payload["config_snapshot"]["ollama_url"] == "http://localhost:11434"
+
+
 def test_finish_debug_session_cleans_up_even_if_result_write_fails(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -200,6 +227,24 @@ def test_start_debug_session_rejects_overlapping_active_session(tmp_path, monkey
         )
 
     finish_debug_session(success=True, command="health", summary={"result_count": 0})
+
+
+def test_start_debug_session_snapshots_argv(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    argv = ["--debug", "health"]
+    session = start_debug_session(
+        argv=argv,
+        cwd="/work/tree",
+        command="health",
+    )
+    argv.append("--mutated")
+    write_context({"config_snapshot": {"ollama_url": "http://localhost:11434"}})
+    finish_debug_session(success=True, command="health", summary={"result_count": 0})
+
+    context_payload = json.loads((session.debug_dir / "context.json").read_text(encoding="utf-8"))
+    assert session.argv == ["--debug", "health"]
+    assert context_payload["argv"] == ["--debug", "health"]
 
 
 def test_finish_debug_session_uses_active_session_command(tmp_path, monkeypatch):
