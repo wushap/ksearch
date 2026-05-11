@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from ksearch.debug_logging import finish_debug_session, log_event, start_debug_session, write_context
 
 
@@ -85,7 +87,40 @@ def test_finished_session_rejects_further_context_and_event_writes(tmp_path, mon
     assert (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines() == event_lines_before
 
 
-def test_start_debug_session_allows_two_sessions_in_same_second(tmp_path, monkeypatch):
+def test_finish_debug_session_cleans_up_even_if_result_write_fails(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    session = start_debug_session(
+        argv=["--debug", "health"],
+        cwd="/work/tree",
+        command="health",
+    )
+
+    def fail_dump(*args, **kwargs):
+        raise OSError("disk full")
+
+    with monkeypatch.context() as context:
+        context.setattr("ksearch.debug_logging.json.dump", fail_dump)
+        with pytest.raises(OSError, match="disk full"):
+            finish_debug_session(
+                success=True,
+                command="health",
+                summary={"result_count": 0},
+            )
+
+    assert session.finished is True
+    assert session.logger.handlers == []
+
+    next_session = start_debug_session(
+        argv=["--debug", "search", "asyncio"],
+        cwd="/work/tree",
+        command="search",
+    )
+    finish_debug_session(success=True, command="search", summary={"result_count": 1})
+    assert next_session.debug_dir.exists()
+
+
+def test_start_debug_session_allows_two_finished_sessions_in_same_second(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
 
     class FrozenDateTime:
@@ -100,12 +135,33 @@ def test_start_debug_session_allows_two_sessions_in_same_second(tmp_path, monkey
         cwd="/work/tree",
         command="health",
     )
+    finish_debug_session(success=True, command="health", summary={"result_count": 0})
     second = start_debug_session(
         argv=["--debug", "search", "asyncio"],
         cwd="/work/tree",
         command="search",
     )
+    finish_debug_session(success=True, command="search", summary={"result_count": 1})
 
     assert first.debug_dir != second.debug_dir
     assert first.debug_dir.name.startswith("cli-20260511-120000")
     assert second.debug_dir.name.startswith("cli-20260511-120000")
+
+
+def test_start_debug_session_rejects_overlapping_active_session(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    start_debug_session(
+        argv=["--debug", "health"],
+        cwd="/work/tree",
+        command="health",
+    )
+
+    with pytest.raises(RuntimeError, match="already active"):
+        start_debug_session(
+            argv=["--debug", "search"],
+            cwd="/work/tree",
+            command="search",
+        )
+
+    finish_debug_session(success=True, command="health", summary={"result_count": 0})

@@ -88,6 +88,10 @@ def _close_logger(logger: logging.Logger) -> None:
 
 
 def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSession:
+    active_session = _SESSION.get()
+    if active_session is not None and not active_session.finished:
+        raise RuntimeError("debug session already active")
+
     debug_dir = _create_debug_dir()
 
     session_logger = logging.getLogger(f"ksearch.debug.{debug_dir.name}")
@@ -173,8 +177,10 @@ def finish_debug_session(
         "summary": _sanitize(summary or {}),
         "error": _sanitize(error or {}),
     }
-    with (session.debug_dir / "result.json").open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, ensure_ascii=False)
-    session.logger.info("debug session finished")
-    _close_logger(session.logger)
-    _SESSION.set(None)
+    try:
+        with (session.debug_dir / "result.json").open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+        session.logger.info("debug session finished")
+    finally:
+        _close_logger(session.logger)
+        _SESSION.set(None)
