@@ -32,10 +32,6 @@ class DebugSession:
     finished: bool = False
 
 
-def reset_debug_session_for_tests() -> None:
-    _SESSION.set(None)
-
-
 def _debug_root() -> Path:
     return Path("~/.ksearch/debug").expanduser()
 
@@ -69,12 +65,32 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
-def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSession:
+def _create_debug_dir() -> Path:
     timestamp = datetime.now().strftime("cli-%Y%m%d-%H%M%S")
-    debug_dir = _debug_root() / timestamp
-    debug_dir.mkdir(parents=True, exist_ok=False)
+    debug_root = _debug_root()
 
-    session_logger = logging.getLogger(f"ksearch.debug.{timestamp}")
+    for index in range(1000):
+        suffix = "" if index == 0 else f"-{index}"
+        debug_dir = debug_root / f"{timestamp}{suffix}"
+        try:
+            debug_dir.mkdir(parents=True, exist_ok=False)
+            return debug_dir
+        except FileExistsError:
+            continue
+
+    raise RuntimeError(f"unable to create debug directory under {debug_root}")
+
+
+def _close_logger(logger: logging.Logger) -> None:
+    for handler in list(logger.handlers):
+        handler.close()
+        logger.removeHandler(handler)
+
+
+def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSession:
+    debug_dir = _create_debug_dir()
+
+    session_logger = logging.getLogger(f"ksearch.debug.{debug_dir.name}")
     session_logger.setLevel(logging.DEBUG)
     session_logger.handlers.clear()
     handler = logging.FileHandler(debug_dir / "session.log", encoding="utf-8")
@@ -100,7 +116,7 @@ def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSess
 
 def write_context(payload: dict[str, Any]) -> None:
     session = _SESSION.get()
-    if session is None:
+    if session is None or session.finished:
         return
     session.context.update(_sanitize(payload))
     context = {
@@ -121,7 +137,7 @@ def log_event(
     level: str = "DEBUG",
 ) -> None:
     session = _SESSION.get()
-    if session is None:
+    if session is None or session.finished:
         return
     sanitized = _sanitize(data or {})
     payload = {
@@ -160,3 +176,5 @@ def finish_debug_session(
     with (session.debug_dir / "result.json").open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)
     session.logger.info("debug session finished")
+    _close_logger(session.logger)
+    _SESSION.set(None)
