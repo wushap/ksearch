@@ -4,7 +4,23 @@ from pathlib import Path
 
 import pytest
 
+import ksearch.debug_logging as debug_logging
 from ksearch.debug_logging import finish_debug_session, log_event, start_debug_session, write_context
+
+
+@pytest.fixture(autouse=True)
+def cleanup_debug_session():
+    session = debug_logging._SESSION.get()
+    if session is not None:
+        debug_logging._close_logger(session.logger)
+        debug_logging._SESSION.set(None)
+
+    yield
+
+    session = debug_logging._SESSION.get()
+    if session is not None:
+        debug_logging._close_logger(session.logger)
+        debug_logging._SESSION.set(None)
 
 
 def test_start_debug_session_creates_expected_artifacts_and_contents(tmp_path, monkeypatch):
@@ -165,3 +181,24 @@ def test_start_debug_session_rejects_overlapping_active_session(tmp_path, monkey
         )
 
     finish_debug_session(success=True, command="health", summary={"result_count": 0})
+
+
+def test_start_debug_session_removes_directory_if_file_handler_creation_fails(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    def fail_file_handler(*args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("ksearch.debug_logging.logging.FileHandler", fail_file_handler)
+
+    with pytest.raises(OSError, match="permission denied"):
+        start_debug_session(
+            argv=["--debug", "health"],
+            cwd="/work/tree",
+            command="health",
+        )
+
+    debug_root = Path(tmp_path) / ".ksearch" / "debug"
+    assert list(debug_root.glob("cli-*")) == []

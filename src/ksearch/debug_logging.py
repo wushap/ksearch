@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+import shutil
 from typing import Any
 
 
@@ -93,16 +94,19 @@ def start_debug_session(*, argv: list[str], cwd: str, command: str) -> DebugSess
         raise RuntimeError("debug session already active")
 
     debug_dir = _create_debug_dir()
-
-    session_logger = logging.getLogger(f"ksearch.debug.{debug_dir.name}")
-    session_logger.setLevel(logging.DEBUG)
-    session_logger.handlers.clear()
-    handler = logging.FileHandler(debug_dir / "session.log", encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
-    )
-    session_logger.addHandler(handler)
-    session_logger.propagate = False
+    try:
+        session_logger = logging.getLogger(f"ksearch.debug.{debug_dir.name}")
+        session_logger.setLevel(logging.DEBUG)
+        session_logger.handlers.clear()
+        handler = logging.FileHandler(debug_dir / "session.log", encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        )
+        session_logger.addHandler(handler)
+        session_logger.propagate = False
+    except Exception:
+        shutil.rmtree(debug_dir)
+        raise
 
     session = DebugSession(
         argv=argv,
