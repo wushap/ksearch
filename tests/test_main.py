@@ -117,6 +117,24 @@ def test_root_debug_flag_captures_nested_command_path(monkeypatch, tmp_path):
     assert context["command"] == "kbase query"
 
 
+def test_root_debug_flag_marks_failed_invocation_in_result_json(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    missing_path = tmp_path / "missing.md"
+    result = runner.invoke(
+        app,
+        ["--debug", "kbase", "ingest", str(missing_path), "--source", "test"],
+    )
+
+    sessions = sorted((tmp_path / ".ksearch" / "debug").glob("cli-*"))
+    assert result.exit_code != 0
+    assert len(sessions) == 1
+
+    summary = json.loads((sessions[0] / "result.json").read_text(encoding="utf-8"))
+    assert summary["success"] is False
+    assert summary["command"] == "kbase ingest"
+
+
 def test_health_command_runs_without_name_error(monkeypatch):
     """Health command should complete via legacy patch points."""
 

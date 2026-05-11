@@ -3,6 +3,7 @@
 import os
 import sys
 
+import click
 import typer
 from typer.core import TyperGroup
 
@@ -57,6 +58,18 @@ def _root_command(argv: list[str]) -> str:
     return command
 
 
+def _did_command_succeed() -> bool:
+    exc = sys.exc_info()[1]
+    if exc is None:
+        return True
+    if isinstance(exc, click.exceptions.Exit):
+        return exc.exit_code == 0
+    if isinstance(exc, SystemExit):
+        code = exc.code
+        return code in (None, 0)
+    return False
+
+
 @app.callback()
 def root_callback(
     ctx: typer.Context,
@@ -81,7 +94,7 @@ def root_callback(
     ctx.obj["debug_session"] = session
     ctx.call_on_close(
         lambda: finish_debug_session(
-            success=True,
+            success=_did_command_succeed(),
             command=session.command,
         )
     )
