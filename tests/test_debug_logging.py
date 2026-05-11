@@ -103,6 +103,25 @@ def test_finished_session_rejects_further_context_and_event_writes(tmp_path, mon
     assert (session.debug_dir / "events.jsonl").read_text(encoding="utf-8").splitlines() == event_lines_before
 
 
+def test_write_context_merges_nested_dictionaries(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    session = start_debug_session(
+        argv=["--debug", "health"],
+        cwd="/work/tree",
+        command="health",
+    )
+    write_context({"config_snapshot": {"ollama_url": "http://localhost:11434"}})
+    write_context({"config_snapshot": {"timeout": 30}})
+    finish_debug_session(success=True, command="health", summary={"result_count": 0})
+
+    context_payload = json.loads((session.debug_dir / "context.json").read_text(encoding="utf-8"))
+    assert context_payload["config_snapshot"] == {
+        "ollama_url": "http://localhost:11434",
+        "timeout": 30,
+    }
+
+
 def test_finish_debug_session_cleans_up_even_if_result_write_fails(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -181,6 +200,20 @@ def test_start_debug_session_rejects_overlapping_active_session(tmp_path, monkey
         )
 
     finish_debug_session(success=True, command="health", summary={"result_count": 0})
+
+
+def test_finish_debug_session_uses_active_session_command(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    session = start_debug_session(
+        argv=["--debug", "health"],
+        cwd="/work/tree",
+        command="health",
+    )
+    finish_debug_session(success=True, command="search", summary={"result_count": 0})
+
+    result_payload = json.loads((session.debug_dir / "result.json").read_text(encoding="utf-8"))
+    assert result_payload["command"] == "health"
 
 
 def test_start_debug_session_removes_directory_if_file_handler_creation_fails(

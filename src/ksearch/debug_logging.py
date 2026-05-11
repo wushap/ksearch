@@ -66,6 +66,17 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def _merge_dicts(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in updates.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_dicts(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _create_debug_dir() -> Path:
     timestamp = datetime.now().strftime("cli-%Y%m%d-%H%M%S")
     debug_root = _debug_root()
@@ -126,7 +137,7 @@ def write_context(payload: dict[str, Any]) -> None:
     session = _SESSION.get()
     if session is None or session.finished:
         return
-    session.context.update(_sanitize(payload))
+    session.context = _merge_dicts(session.context, _sanitize(payload))
     context = {
         "argv": session.argv,
         "command": session.command,
@@ -174,7 +185,7 @@ def finish_debug_session(
     session.finished = True
     payload = {
         "success": success,
-        "command": command,
+        "command": session.command,
         "started_at": session.started_at_iso,
         "finished_at": datetime.now().isoformat(),
         "elapsed_ms": int((time.time() - session.started_at) * 1000),
