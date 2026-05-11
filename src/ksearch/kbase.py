@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import Optional
 
 from ksearch.config import expand_path
+from ksearch.debug_logging import log_event
 from ksearch.embeddings import simple_hash_embedding
 from ksearch.knowledge.service import build_knowledge_service
 
@@ -117,6 +118,18 @@ class KnowledgeBase:
             raise ValueError(f"Unknown mode: {mode}. Use 'chroma' or 'qdrant'")
 
         self._validate_or_initialize_metadata()
+        log_event(
+            "ksearch.kbase",
+            "kbase_initialized",
+            {
+                "mode": self.mode,
+                "persist_dir": self.persist_dir,
+                "embedding_model": self.embedding_model,
+                "embedding_dimension": self.embedding_dimension,
+                "use_hybrid": self.use_hybrid,
+                "use_rerank": self.use_rerank,
+            },
+        )
 
     def _init_chroma(self):
         """Initialize Chroma embedded mode."""

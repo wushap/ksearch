@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from ksearch.debug_logging import log_event
 from ksearch.knowledge.bm25_index import BM25Index
 
 
@@ -278,12 +279,22 @@ class KnowledgeVectorStore:
         """
         # 1. BM25 retrieval
         bm25_hits = self.bm25.query(query, top_k=bm25_top_k)
+        log_event(
+            "ksearch.knowledge.vector_store",
+            "bm25_hits_ready",
+            {"count": len(bm25_hits)},
+        )
 
         # 2. Vector retrieval
         vector_raw = self.query(
             embedding=embedding, top_k=vector_top_k, filter_source=filter_source
         )
         vector_hits = self._normalize_vector_results(vector_raw)
+        log_event(
+            "ksearch.knowledge.vector_store",
+            "vector_hits_ready",
+            {"count": len(vector_hits)},
+        )
 
         # 3. RRF merge
         scores: dict[str, float] = {}
@@ -327,6 +338,11 @@ class KnowledgeVectorStore:
             doc_map[doc_id]["score"] = rrf_score
 
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        log_event(
+            "ksearch.knowledge.vector_store",
+            "hybrid_ranked",
+            {"count": len(ranked), "rrf_k": rrf_k},
+        )
         return [doc_map[doc_id] for doc_id, _ in ranked]
 
     def _normalize_vector_results(self, raw_results) -> list[dict]:

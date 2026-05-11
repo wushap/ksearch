@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ksearch.config import expand_path
+from ksearch.debug_logging import log_event
 from ksearch.embeddings import build_kbase_embedding_function
 from ksearch.knowledge.chunking import chunk_text
 from ksearch.knowledge.vector_store import KnowledgeVectorStore
@@ -190,9 +191,19 @@ class KnowledgeService:
         del filter_tags  # Reserved for compatibility.
         embed_fn = embedding_fn or self.embed_text
         embedding = embed_fn(query)
+        log_event(
+            "ksearch.knowledge.service",
+            "query_embedding_ready",
+            {"query": query, "top_k": top_k},
+        )
 
         # Stage 1: Retrieval
         if self.use_hybrid and self.vector_store.bm25.size > 0:
+            log_event(
+                "ksearch.knowledge.service",
+                "hybrid_retrieval_selected",
+                {"bm25_size": self.vector_store.bm25.size},
+            )
             candidate_dicts = self.vector_store.hybrid_query(
                 query=query,
                 embedding=embedding,
@@ -200,12 +211,22 @@ class KnowledgeService:
                 filter_source=filter_source,
             )
         else:
+            log_event(
+                "ksearch.knowledge.service",
+                "vector_retrieval_selected",
+                {"top_k": top_k * 4},
+            )
             raw_results = self.vector_store.query(
                 embedding=embedding,
                 top_k=top_k * 4,
                 filter_source=filter_source,
             )
             candidate_dicts = self._format_raw_results(raw_results)
+        log_event(
+            "ksearch.knowledge.service",
+            "candidate_dicts_ready",
+            {"count": len(candidate_dicts), "use_rerank": self.use_rerank},
+        )
 
         # Stage 2: Re-ranking
         if self.use_rerank and self.reranker and candidate_dicts:

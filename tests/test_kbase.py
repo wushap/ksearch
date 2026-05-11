@@ -3,6 +3,7 @@
 import os
 import tempfile
 import pytest
+from unittest.mock import patch
 
 from ksearch.kbase import KnowledgeBase, KnowledgeBaseEntry, KnowledgeBaseSearchResult
 
@@ -450,3 +451,22 @@ class TestKnowledgeBaseContentIngest:
             results = kbase.search("compatible content", top_k=3)
             assert len(results) > 0
             assert any(r.file_path == provided_file_path for r in results)
+
+
+def test_kbase_logs_initialization_mode(monkeypatch):
+    class FakeService:
+        embed_text = staticmethod(lambda text: [0.1])
+
+    class FakeStore:
+        client = object()
+        collection = object()
+
+        def count(self):
+            return 0
+
+    monkeypatch.setattr("ksearch.kbase.build_knowledge_service", lambda **kwargs: (FakeService(), FakeStore()))
+
+    with tempfile.TemporaryDirectory() as tmpdir, patch("ksearch.kbase.log_event") as log_event:
+        KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+
+    assert any(call.args[1] == "kbase_initialized" for call in log_event.call_args_list)

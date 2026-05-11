@@ -2,7 +2,9 @@
 
 import tempfile
 import pytest
+from unittest.mock import Mock, patch
 
+from ksearch.knowledge.service import KnowledgeService
 from ksearch.knowledge.vector_store import KnowledgeVectorStore
 from ksearch.knowledge.bm25_index import BM25Index
 
@@ -208,3 +210,69 @@ class TestBM25Lifecycle:
         assert store.bm25.size == 2
         store.delete_entry("1")
         assert store.bm25.size == 1
+
+
+def test_knowledge_service_logs_hybrid_candidate_counts():
+    vector_store = Mock()
+    vector_store.bm25.size = 3
+    vector_store.hybrid_query.return_value = [
+        {
+            "id": "a",
+            "content": "asyncio cancellation propagation",
+            "score": 0.8,
+            "file_path": "/tmp/a.md",
+            "title": "A",
+            "source": "manual",
+            "metadata": {},
+        }
+    ]
+
+    service = KnowledgeService(
+        mode="chroma",
+        vector_store=vector_store,
+        embed_text=lambda text: [0.1, 0.2],
+        id_generator=lambda file_path, content, chunk_index: "id",
+        entry_cls=dict,
+        result_cls=lambda **kwargs: kwargs,
+        reranker=None,
+        use_hybrid=True,
+        use_rerank=False,
+    )
+
+    with patch("ksearch.knowledge.service.log_event") as log_event:
+        service.search("asyncio cancellation", top_k=1, embedding_fn=lambda text: [0.1, 0.2])
+
+    names = [call.args[1] for call in log_event.call_args_list]
+    assert "hybrid_retrieval_selected" in names
+    assert "candidate_dicts_ready" in names
+
+
+def test_hybrid_query_logs_bm25_and_vector_counts():
+    def make_embedding(seed: int) -> list[float]:
+        vec = [float((seed * (i + 1)) % 10) / 10.0 for i in range(8)]
+        norm = sum(v * v for v in vec) ** 0.5
+        return [v / norm if norm else 0.0 for v in vec]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        store = KnowledgeVectorStore(
+            mode="chroma",
+            persist_dir=tmpdir,
+            collection_name="test_events",
+            embedding_dimension=8,
+        )
+        docs = ["Python asyncio programming", "Rust ownership model"]
+        ids = ["1", "2"]
+        embeddings = [make_embedding(i + 1) for i in range(2)]
+        metadatas = [
+            {"id": ids[0], "content": docs[0], "file_path": "/a", "title": "A", "source": "s1"},
+            {"id": ids[1], "content": docs[1], "file_path": "/b", "title": "B", "source": "s2"},
+        ]
+        store.add(ids=ids, documents=docs, embeddings=embeddings, metadatas=metadatas)
+
+        with patch("ksearch.knowledge.vector_store.log_event") as log_event:
+            store.hybrid_query(query="Python programming", embedding=embeddings[0], top_k=2)
+
+    names = [call.args[1] for call in log_event.call_args_list]
+    assert "bm25_hits_ready" in names
+    assert "vector_hits_ready" in names
+    assert "hybrid_ranked" in names
