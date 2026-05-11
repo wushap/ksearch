@@ -12,14 +12,7 @@ from ksearch.__main__ import app
 runner = CliRunner()
 
 
-def test_app_help_uses_ksearch_as_primary_name():
-    result = runner.invoke(app, ["--help"])
-
-    assert result.exit_code == 0
-    assert "ksearch" in result.output
-
-
-def test_root_debug_flag_creates_session_for_health(monkeypatch, tmp_path):
+def _mock_health_dependencies(monkeypatch, home: str | None = None) -> None:
     class FakeEmbedder:
         def __init__(self, *args, **kwargs):
             pass
@@ -35,9 +28,21 @@ def test_root_debug_flag_creates_session_for_health(monkeypatch, tmp_path):
     class FakeResponse:
         status_code = 200
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    if home is not None:
+        monkeypatch.setenv("HOME", home)
     monkeypatch.setattr("ksearch.cli_system.EmbeddingGenerator", FakeEmbedder)
     monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
+
+
+def test_app_help_uses_ksearch_as_primary_name():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "ksearch" in result.output
+
+
+def test_root_debug_flag_creates_session_for_health(monkeypatch, tmp_path):
+    _mock_health_dependencies(monkeypatch, str(tmp_path))
 
     result = runner.invoke(app, ["--debug", "health"])
 
@@ -51,29 +56,65 @@ def test_root_debug_flag_creates_session_for_health(monkeypatch, tmp_path):
 
 
 def test_root_without_debug_does_not_create_debug_directory(monkeypatch, tmp_path):
-    class FakeEmbedder:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def health_check(self):
-            return {
-                "ollama": False,
-                "ollama_error": "unavailable",
-                "sentence_transformers": True,
-                "ollama_models": [],
-            }
-
-    class FakeResponse:
-        status_code = 200
-
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setattr("ksearch.cli_system.EmbeddingGenerator", FakeEmbedder)
-    monkeypatch.setattr("requests.get", lambda *args, **kwargs: FakeResponse())
+    _mock_health_dependencies(monkeypatch, str(tmp_path))
 
     result = runner.invoke(app, ["health"])
 
     assert result.exit_code == 0
     assert not (tmp_path / ".ksearch" / "debug").exists()
+
+
+def test_root_debug_flag_closes_session_between_invocations(monkeypatch, tmp_path):
+    _mock_health_dependencies(monkeypatch, str(tmp_path))
+
+    first = runner.invoke(app, ["--debug", "health"])
+    second = runner.invoke(app, ["--debug", "health"])
+
+    sessions = sorted((tmp_path / ".ksearch" / "debug").glob("cli-*"))
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert len(sessions) == 2
+
+
+def test_root_debug_flag_captures_nested_command_path(monkeypatch, tmp_path):
+    _mock_health_dependencies(monkeypatch, str(tmp_path))
+
+    kbase_dir = tmp_path / "kbase"
+    doc_path = tmp_path / "note.md"
+    doc_path.write_text("# Asyncio Notes\n\nCancellation propagation reference.", encoding="utf-8")
+
+    ingest_result = runner.invoke(
+        app,
+        ["kbase", "ingest", str(doc_path), "--kbase-dir", str(kbase_dir), "--source", "test"],
+    )
+    assert ingest_result.exit_code == 0
+
+    result = runner.invoke(
+        app,
+        [
+            "--debug",
+            "kbase",
+            "query",
+            "Cancellation propagation",
+            "--kbase-dir",
+            str(kbase_dir),
+        ],
+    )
+
+    sessions = sorted((tmp_path / ".ksearch" / "debug").glob("cli-*"))
+    assert result.exit_code == 0
+    assert len(sessions) == 1
+
+    context = json.loads((sessions[0] / "context.json").read_text(encoding="utf-8"))
+    assert context["argv"] == [
+        "--debug",
+        "kbase",
+        "query",
+        "Cancellation propagation",
+        "--kbase-dir",
+        str(kbase_dir),
+    ]
+    assert context["command"] == "kbase query"
 
 
 def test_health_command_runs_without_name_error(monkeypatch):
