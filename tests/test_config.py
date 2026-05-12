@@ -144,6 +144,10 @@ def test_default_config_contains_ollama_rerank_model():
     assert DEFAULT_CONFIG["rerank_model"] == "gemma4:e2b"
 
 
+def test_default_config_strict_embedding_defaults():
+    assert DEFAULT_CONFIG["allow_embedding_fallback"] is False
+
+
 def test_merge_config_overrides_optimization_keys():
     cli_args = {"optimization_enabled": True, "optimization_model": "llama3"}
     result = merge_config(cli_args, {}, DEFAULT_CONFIG)

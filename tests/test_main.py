@@ -85,7 +85,17 @@ def test_root_debug_flag_captures_nested_command_path(monkeypatch, tmp_path):
 
     ingest_result = runner.invoke(
         app,
-        ["kbase", "ingest", str(doc_path), "--kbase-dir", str(kbase_dir), "--source", "test"],
+        [
+            "kbase",
+            "ingest",
+            str(doc_path),
+            "--kbase-dir",
+            str(kbase_dir),
+            "--source",
+            "test",
+            "--embedding-mode",
+            "simple",
+        ],
     )
     assert ingest_result.exit_code == 0
 
@@ -98,6 +108,8 @@ def test_root_debug_flag_captures_nested_command_path(monkeypatch, tmp_path):
             "Cancellation propagation",
             "--kbase-dir",
             str(kbase_dir),
+            "--embedding-mode",
+            "simple",
         ],
     )
 
@@ -113,6 +125,8 @@ def test_root_debug_flag_captures_nested_command_path(monkeypatch, tmp_path):
         "Cancellation propagation",
         "--kbase-dir",
         str(kbase_dir),
+        "--embedding-mode",
+        "simple",
     ]
     assert context["command"] == "kbase query"
 
@@ -176,7 +190,17 @@ def test_search_command_accepts_kbase_dir_for_only_cache_flow():
 
         ingest_result = runner.invoke(
             app,
-            ["kbase", "ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
+            [
+                "kbase",
+                "ingest",
+                doc_path,
+                "--kbase-dir",
+                kbase_dir,
+                "--source",
+                "test",
+                "--embedding-mode",
+                "simple",
+            ],
         )
         assert ingest_result.exit_code == 0
 
@@ -189,6 +213,8 @@ def test_search_command_accepts_kbase_dir_for_only_cache_flow():
                 "chroma",
                 "--kbase-dir",
                 kbase_dir,
+                "--embedding-mode",
+                "simple",
                 "--only-cache",
             ],
         )
@@ -198,7 +224,7 @@ def test_search_command_accepts_kbase_dir_for_only_cache_flow():
 
 
 def test_search_command_uses_iterative_defaults_from_config(monkeypatch):
-    """Search should honor iterative defaults when no explicit iterative flag is passed."""
+    """Search should auto-downgrade default iterative flow when probes fail."""
 
     class FakeCache:
         def __init__(self, *args, **kwargs):
@@ -214,12 +240,14 @@ def test_search_command_uses_iterative_defaults_from_config(monkeypatch):
 
     class FakeSearchEngine:
         called = False
+        config = None
 
         def __init__(self, *args, **kwargs):
             pass
 
-        def search(self, *args, **kwargs):
+        def search(self, _keyword, config):
             FakeSearchEngine.called = True
+            FakeSearchEngine.config = config
             return []
 
     class FakeIterativeEngine:
@@ -233,20 +261,110 @@ def test_search_command_uses_iterative_defaults_from_config(monkeypatch):
             FakeIterativeEngine.called = True
             return []
 
+    build_kbase_called = False
+
+    def fake_build_kbase(_config):
+        nonlocal build_kbase_called
+        build_kbase_called = True
+        return object()
+
+    def fake_resolve_search_runtime_config(config, explicit_flags):
+        degraded = dict(config)
+        degraded["kbase_mode"] = "none"
+        degraded["iterative_enabled"] = False
+        degraded["rerank_enabled"] = False
+        degraded["optimization_enabled"] = False
+        return degraded, [{"feature": "iterative", "reason": "ollama unavailable"}]
+
     monkeypatch.setattr("ksearch.cli.search.load_config", lambda *_args, **_kwargs: {})
     monkeypatch.setattr("ksearch.cli.search.CacheManager", FakeCache)
     monkeypatch.setattr("ksearch.cli.search.SearXNGClient", FakeSearxng)
     monkeypatch.setattr("ksearch.cli.search.ContentConverter", FakeConverter)
     monkeypatch.setattr("ksearch.cli.search.SearchEngine", FakeSearchEngine)
     monkeypatch.setattr("ksearch.cli.search.IterativeSearchEngine", FakeIterativeEngine)
-    monkeypatch.setattr("ksearch.cli.search.build_kbase", lambda config: object())
+    monkeypatch.setattr("ksearch.cli.search.build_kbase", fake_build_kbase)
+    monkeypatch.setattr("ksearch.cli.search.resolve_search_runtime_config", fake_resolve_search_runtime_config)
 
     result = runner.invoke(app, ["search", "default iterative query"])
 
     assert result.exit_code == 0
-    assert FakeIterativeEngine.called is True
-    assert FakeIterativeEngine.config["iterative_enabled"] is True
-    assert FakeSearchEngine.called is False
+    assert build_kbase_called is False
+    assert FakeIterativeEngine.called is False
+    assert FakeSearchEngine.called is True
+    assert FakeSearchEngine.config["iterative_enabled"] is False
+
+
+def test_search_command_preserves_config_booleans_when_flags_unspecified(monkeypatch):
+    class FakeCache:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeSearxng:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeConverter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeSearchEngine:
+        config = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def search(self, _keyword, config):
+            FakeSearchEngine.config = config
+            return []
+
+    monkeypatch.setattr(
+        "ksearch.cli.search.load_config",
+        lambda *_args, **_kwargs: {
+            "only_cache": True,
+            "no_cache": True,
+            "verbose": True,
+            "kbase_mode": "none",
+        },
+    )
+    monkeypatch.setattr("ksearch.cli.search.CacheManager", FakeCache)
+    monkeypatch.setattr("ksearch.cli.search.SearXNGClient", FakeSearxng)
+    monkeypatch.setattr("ksearch.cli.search.ContentConverter", FakeConverter)
+    monkeypatch.setattr("ksearch.cli.search.SearchEngine", FakeSearchEngine)
+
+    result = runner.invoke(app, ["search", "config booleans"])
+
+    assert result.exit_code == 0
+    assert FakeSearchEngine.config["only_cache"] is True
+    assert FakeSearchEngine.config["no_cache"] is True
+    assert FakeSearchEngine.config["verbose"] is True
+
+
+def test_search_command_explicit_iterative_reports_probe_failure(monkeypatch):
+    class FakeCache:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeSearxng:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeConverter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr("ksearch.cli.search.load_config", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr("ksearch.cli.search.CacheManager", FakeCache)
+    monkeypatch.setattr("ksearch.cli.search.SearXNGClient", FakeSearxng)
+    monkeypatch.setattr("ksearch.cli.search.ContentConverter", FakeConverter)
+    monkeypatch.setattr(
+        "ksearch.cli.search.resolve_search_runtime_config",
+        lambda _config, _explicit_flags: (_ for _ in ()).throw(RuntimeError("iterative requires available kbase")),
+    )
+
+    result = runner.invoke(app, ["search", "default iterative query", "--iterative", "--kbase", "chroma"])
+
+    assert result.exit_code == 1
+    assert "iterative requires available kbase" in result.output
 
 
 def test_query_command_searches_kbase_entries():
@@ -258,13 +376,31 @@ def test_query_command_searches_kbase_entries():
 
         ingest_result = runner.invoke(
             app,
-            ["kbase", "ingest", doc_path, "--kbase-dir", kbase_dir, "--source", "test"],
+            [
+                "kbase",
+                "ingest",
+                doc_path,
+                "--kbase-dir",
+                kbase_dir,
+                "--source",
+                "test",
+                "--embedding-mode",
+                "simple",
+            ],
         )
         assert ingest_result.exit_code == 0
 
         query_result = runner.invoke(
             app,
-            ["kbase", "query", "Cancellation propagation", "--kbase-dir", kbase_dir],
+            [
+                "kbase",
+                "query",
+                "Cancellation propagation",
+                "--kbase-dir",
+                kbase_dir,
+                "--embedding-mode",
+                "simple",
+            ],
         )
 
         assert query_result.exit_code == 0

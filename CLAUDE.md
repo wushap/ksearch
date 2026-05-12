@@ -17,7 +17,7 @@ uv pip install -e ".[all]"
 
 # Run the CLI
 ksearch search "query"
-kbase query "term" --top-k 5
+ksearch kbase query "term" --top-k 5
 ksearch optimize "query" --verbose
 
 # Run tests
@@ -68,11 +68,11 @@ Top-level files (`cache.py`, `search.py`, `kbase.py`, `converter.py`, `content_o
 
 ## Key Design Decisions
 
-- **Embedding safety**: kbase stores embedding model/dimension in metadata. Switching embeddings requires an explicit `kbase reset` to avoid vector mismatches.
+- **Embedding safety**: kbase stores embedding model/dimension in metadata. Switching embeddings requires an explicit `ksearch kbase reset` to avoid vector mismatches.
 - **Extraction pipeline**: trafilatura for main-body extraction, markitdown as fallback.
 - **Storage**: SQLite index + Markdown files for cache; Chroma embedded or Qdrant server for vector store.
 - **Config path**: `~/.ksearch/config.json`
-- **Content optimization**: uses Ollama `/api/chat` (not `/api/embeddings`) with `gemma4:e2b` for LLM generation. Disabled by default (`optimization_enabled: false`). Lazy imports avoid pulling in the module when not needed.
+- **Content optimization**: uses Ollama `/api/chat` (not `/api/embeddings`) with `gemma4:e2b` for LLM generation. Default search config enables it, but the search CLI auto-disables optimization, rerank, iterative, or kbase paths when their dependencies are unavailable. Lazy imports avoid pulling in the module when not needed.
 
 ## External Services
 

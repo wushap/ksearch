@@ -186,13 +186,55 @@ def simple_hash_embedding(text: str, dimension: int) -> list[float]:
 
 def build_kbase_embedding_function(
     *,
+    embedding_mode: str = "ollama",
     embedding_model: str,
     embedding_dimension: int,
     ollama_url: str,
+    allow_embedding_fallback: bool = False,
 ):
     """Build embedding function preserving KnowledgeBase fallback semantics."""
 
+    def embed_with_sentence_transformers(text: str) -> list[float]:
+        from sentence_transformers import SentenceTransformer
+
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        embedding = model.encode(text).tolist()
+        if len(embedding) != embedding_dimension:
+            raise ValueError(
+                f"Embedding dimension mismatch for fallback sentence-transformers model: "
+                f"expected {embedding_dimension}, got {len(embedding)}"
+            )
+        return embedding
+
+    def fallback_embed(text: str, original_error: Exception) -> list[float]:
+        if not allow_embedding_fallback:
+            raise original_error
+
+        try:
+            return embed_with_sentence_transformers(text)
+        except ImportError:
+            logger.warning("sentence-transformers not installed, falling back to simple hash embeddings")
+        except Exception as exc:
+            logger.warning(f"sentence-transformers fallback failed: {exc}")
+
+        logger.warning("Falling back to simple hash embeddings for kbase")
+        return simple_hash_embedding(text, embedding_dimension)
+
     def embed(text: str) -> list[float]:
+        if embedding_mode == "simple":
+            return simple_hash_embedding(text, embedding_dimension)
+
+        if embedding_mode == "sentence-transformers":
+            try:
+                return embed_with_sentence_transformers(text)
+            except Exception as exc:
+                return fallback_embed(
+                    text,
+                    RuntimeError(
+                        f"sentence-transformers embedding request failed for model '{embedding_model}': {exc}"
+                    ),
+                )
+
         try:
             import requests
 
@@ -209,19 +251,22 @@ def build_kbase_embedding_function(
                         f"expected {embedding_dimension}, got {len(embedding)}"
                     )
                 return embedding
-        except Exception:
-            pass
-
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            embedding = model.encode(text).tolist()
-            if len(embedding) == embedding_dimension:
-                return embedding
-        except ImportError:
-            pass
-
-        return simple_hash_embedding(text, embedding_dimension)
+            error = RuntimeError(
+                f"Ollama embedding request failed for model '{embedding_model}' "
+                f"with status {response.status_code}: {response.text}"
+            )
+            return fallback_embed(text, error)
+        except ValueError as exc:
+            if "Embedding dimension mismatch" in str(exc):
+                raise
+            return fallback_embed(
+                text,
+                RuntimeError(f"Ollama embedding request failed for model '{embedding_model}': {exc}"),
+            )
+        except Exception as exc:
+            return fallback_embed(
+                text,
+                RuntimeError(f"Ollama embedding request failed for model '{embedding_model}': {exc}"),
+            )
 
     return embed

@@ -137,7 +137,7 @@ ksearch search "task cancellation" --kbase chroma
 ### 3. 只做知识库语义检索
 
 ```bash
-kbase query "异步取消传播" --top-k 5
+ksearch kbase query "异步取消传播" --top-k 5
 ```
 
 适合只想查本地 kbase，不想触发新的网络抓取。
@@ -178,13 +178,13 @@ ollama pull gemma4:e2b
 ## 知识库命令
 
 ```bash
-kbase ingest ~/notes --source logseq --verbose
-kbase ingest ~/docs/readme.md --source manual
-kbase query "异步编程最佳实践" --top-k 5
-kbase list
-kbase delete ~/old-notes/test.md
-kbase clear --confirm
-kbase reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
+ksearch kbase ingest ~/notes --source logseq --verbose
+ksearch kbase ingest ~/docs/readme.md --source manual
+ksearch kbase query "异步编程最佳实践" --top-k 5
+ksearch kbase list
+ksearch kbase delete ~/old-notes/test.md
+ksearch kbase clear --confirm
+ksearch kbase reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
 ```
 
 ## 迭代式 kbase-first 搜索
@@ -216,8 +216,8 @@ kbase reset --confirm --embedding-model nomic-embed-text --embedding-dimension 7
 
 ```bash
 ksearch config --embedding-model mxbai-embed-large --embedding-dimension 1024
-kbase reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
-kbase ingest ~/notes --source logseq
+ksearch kbase reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
+ksearch kbase ingest ~/notes --source logseq
 ```
 
 ## Docker 服务
@@ -273,6 +273,7 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
   "embedding_model": "nomic-embed-text",
   "embedding_dimension": 768,
   "ollama_url": "http://localhost:11434",
+  "allow_embedding_fallback": false,
   "iterative_enabled": true,
   "max_iterations": 5,
   "max_time_seconds": 180,
@@ -322,7 +323,7 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
 
 | 配置项 | 默认值 | 可选值 / 类型 | 用处 |
 | --- | --- | --- | --- |
-| `kbase_mode` | `chroma` | `chroma`、`qdrant`、`none` | 选择 kbase 后端。`none` 表示关闭 kbase；iterative 搜索要求这里是 `chroma` 或 `qdrant`。 |
+| `kbase_mode` | `chroma` | `chroma`、`qdrant`、`none` | 选择 kbase 后端。`none` 表示关闭 kbase。默认 `search` 会先探测后端，不可用时自动关闭 kbase 路径。 |
 | `kbase_dir` | `~/.ksearch/kbase` | 路径字符串 | 本地 kbase 数据和元数据的持久化目录。 |
 | `kbase_top_k` | `5` | 大于等于 1 的整数 | kbase 检索返回的结果数，也是 iterative sufficiency 判断使用的候选数。 |
 | `qdrant_url` | `http://localhost:6333` | URL 字符串 | Qdrant 服务地址，仅在 `kbase_mode=qdrant` 时使用。 |
@@ -335,12 +336,13 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
 | `embedding_model` | `nomic-embed-text` | 模型名字符串 | kbase 使用的 embedding 模型。对已有 kbase 修改该值，通常需要重建或重置 kbase。 |
 | `embedding_dimension` | `768` | 大于等于 1 的整数 | 期望的 embedding 向量维度，必须和实际模型输出维度一致。 |
 | `ollama_url` | `http://localhost:11434` | URL 字符串 | Ollama 服务地址，embedding、rerank、内容优化都会用到。 |
+| `allow_embedding_fallback` | `false` | 布尔值 | 允许 kbase embedding 在失败时退回 sentence-transformers 或 simple。常规运行建议保持关闭，让模型或维度错误直接失败。 |
 
 #### 迭代搜索
 
 | 配置项 | 默认值 | 可选值 / 类型 | 用处 |
 | --- | --- | --- | --- |
-| `iterative_enabled` | `true` | 布尔值 | 开启 kbase-first 的迭代搜索流程。系统会先判断 kbase 结果是否足够，不够时再回退到网页搜索。 |
+| `iterative_enabled` | `true` | 布尔值 | 开启 kbase-first 的迭代搜索流程。系统会先判断 kbase 结果是否足够，不够时再回退到网页搜索。默认 `search` 会在 kbase 不可用时自动关闭它。 |
 | `max_iterations` | `5` | 大于等于 1 的整数 | 初始 kbase 检索之后，最多允许再进行多少轮迭代。 |
 | `max_time_seconds` | `180` | 秒数整数 | 单次 iterative 搜索的总时间预算。 |
 | `fact_threshold` | `0.7` | 浮点数 | 面向事实型问题的 sufficiency 阈值，要求更高。 |
@@ -352,7 +354,7 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
 | 配置项 | 默认值 | 可选值 / 类型 | 用处 |
 | --- | --- | --- | --- |
 | `hybrid_search` | `true` | 布尔值 | 开启 kbase 内部的 BM25 + 向量混合检索。 |
-| `rerank_enabled` | `true` | 布尔值 | 在召回后的 kbase 候选上开启 Ollama rerank。 |
+| `rerank_enabled` | `true` | 布尔值 | 在召回后的 kbase 候选上开启 Ollama rerank。默认 `search` 会在 Ollama rerank 模型不可用时自动关闭它。 |
 | `rerank_model` | `gemma4:e2b` | 模型名字符串 | 用于 rerank 候选片段的 Ollama 模型名。 |
 | `bm25_top_k` | `20` | 大于等于 1 的整数 | 混合检索时参与融合的 BM25 候选数量。 |
 | `vector_top_k` | `20` | 大于等于 1 的整数 | 混合检索时参与融合的向量候选数量。 |
@@ -362,7 +364,7 @@ docker exec ksearch-ollama ollama pull nomic-embed-text
 
 | 配置项 | 默认值 | 可选值 / 类型 | 用处 |
 | --- | --- | --- | --- |
-| `optimization_enabled` | `true` | 布尔值 | 开启 iterative 搜索结果的后处理优化。 |
+| `optimization_enabled` | `true` | 布尔值 | 开启 iterative 搜索结果的后处理优化。默认 `search` 会在 Ollama 优化模型不可用时自动关闭它。 |
 | `optimization_model` | `gemma4:e2b` | 模型名字符串 | 内容优化和质量评估循环使用的 Ollama 模型名。 |
 | `optimization_max_iterations` | `3` | 大于等于 1 的整数 | 内容优化最多允许的 refinement 轮数。 |
 | `optimization_confidence_threshold` | `0.8` | `0.0` 到 `1.0` 的浮点数 | 当评估器置信度达到该阈值时停止继续 refinement。 |

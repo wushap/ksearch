@@ -96,7 +96,7 @@ RESET_OUTPUT="$(run_and_capture "reset temporary kbase" \
   --embedding-model "$EMBED_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL")"
-assert_contains "$RESET_OUTPUT" "Knowledge base reset" "kbase reset should succeed"
+assert_contains "$RESET_OUTPUT" "kbase reset" "kbase reset should succeed"
 
 INGEST_OUTPUT="$(run_and_capture "ingest multilingual fixture notes" \
   uv run ksearch kbase ingest "$NOTES_DIR" \
@@ -192,7 +192,8 @@ BAD_MODEL_SEARCH="$(run_and_capture "search with non-embedding model negative ca
   --embedding-model "$BAD_MODEL" \
   --embedding-dimension "$EMBED_DIMENSION" \
   --ollama-url "$OLLAMA_URL" \
-  --only-cache)"
+  --only-cache 2>&1 || true)"
+assert_contains "$BAD_MODEL_SEARCH" "does not support embeddings" "negative search should fail loudly for non-embedding model"
 
 cat > "$REPORT_PATH" <<EOF
 # Ollama E2E Report

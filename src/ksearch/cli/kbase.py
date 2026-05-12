@@ -20,17 +20,21 @@ def _build_explicit_kbase(
     kbase_mode: str,
     kbase_dir: str,
     qdrant_url: str,
+    embedding_mode: str,
     embedding_model: str,
     embedding_dimension: int,
     ollama_url: str,
+    allow_embedding_fallback: bool,
 ) -> KnowledgeBase:
     return KnowledgeBase(
         mode=kbase_mode,
         persist_dir=kbase_dir,
         qdrant_url=qdrant_url if kbase_mode == "qdrant" else None,
+        embedding_mode=embedding_mode,
         embedding_model=embedding_model,
         embedding_dimension=embedding_dimension,
         ollama_url=ollama_url,
+        allow_embedding_fallback=allow_embedding_fallback,
     )
 
 
@@ -38,17 +42,21 @@ def _kbase_debug_config(
     kbase_mode: str,
     kbase_dir: str,
     qdrant_url: str,
+    embedding_mode: str,
     embedding_model: str,
     embedding_dimension: int,
     ollama_url: str,
+    allow_embedding_fallback: bool,
 ) -> dict[str, object]:
     return {
         "kbase_mode": kbase_mode,
         "kbase_dir": kbase_dir,
         "qdrant_url": qdrant_url,
+        "embedding_mode": embedding_mode,
         "embedding_model": embedding_model,
         "embedding_dimension": embedding_dimension,
         "ollama_url": ollama_url,
+        "allow_embedding_fallback": allow_embedding_fallback,
     }
 
 
@@ -64,9 +72,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
         kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
         kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
         qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+        embedding_mode: str = typer.Option("ollama", "--embedding-mode", help="Embedding backend: ollama, sentence-transformers, or simple"),
         embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+        allow_embedding_fallback: bool = typer.Option(False, "--allow-embedding-fallback/--strict-embedding", help="Allow fallback embeddings instead of fail-fast"),
         verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     ):
         """Ingest files into kbase."""
@@ -77,9 +87,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ),
             command_context={
                 "subcommand": "ingest",
@@ -95,9 +107,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             )
             metadata = {"source": source} if source else {}
 
@@ -150,9 +164,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
         kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
         kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
         qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+        embedding_mode: str = typer.Option("ollama", "--embedding-mode", help="Embedding backend: ollama, sentence-transformers, or simple"),
         embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+        allow_embedding_fallback: bool = typer.Option(False, "--allow-embedding-fallback/--strict-embedding", help="Allow fallback embeddings instead of fail-fast"),
         verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     ):
         """Semantic search in kbase."""
@@ -162,9 +178,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ),
             command_context={
                 "subcommand": "query",
@@ -179,9 +197,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             )
             if verbose:
                 console.print(Panel(f"kbase Search: {query}", title="kbase search"))
@@ -235,9 +255,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
         kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
         kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
         qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+        embedding_mode: str = typer.Option("ollama", "--embedding-mode", help="Embedding backend: ollama, sentence-transformers, or simple"),
         embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+        allow_embedding_fallback: bool = typer.Option(False, "--allow-embedding-fallback/--strict-embedding", help="Allow fallback embeddings instead of fail-fast"),
     ):
         """List kbase statistics."""
         log_command_start(
@@ -246,9 +268,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ),
             command_context={"subcommand": "list"},
         )
@@ -257,9 +281,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             )
             table = Table(title="kbase stats")
             table.add_column("Metric", style="cyan")
@@ -288,9 +314,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
         kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
         kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
         qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+        embedding_mode: str = typer.Option("ollama", "--embedding-mode", help="Embedding backend: ollama, sentence-transformers, or simple"),
         embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+        allow_embedding_fallback: bool = typer.Option(False, "--allow-embedding-fallback/--strict-embedding", help="Allow fallback embeddings instead of fail-fast"),
         confirm: bool = typer.Option(False, "--confirm", help="Confirm clear"),
     ):
         """Clear kbase."""
@@ -300,9 +328,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ),
             command_context={"subcommand": "clear", "confirm": confirm},
         )
@@ -320,9 +350,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ).clear()
             console.print("[green]✓[/green] kbase cleared")
             log_command_success(
@@ -343,9 +375,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
         kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
         kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
         qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+        embedding_mode: str = typer.Option("ollama", "--embedding-mode", help="Embedding backend: ollama, sentence-transformers, or simple"),
         embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+        allow_embedding_fallback: bool = typer.Option(False, "--allow-embedding-fallback/--strict-embedding", help="Allow fallback embeddings instead of fail-fast"),
     ):
         """Delete entries from a specific file."""
         log_command_start(
@@ -354,9 +388,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ),
             command_context={"subcommand": "delete", "file_path": file_path},
         )
@@ -365,9 +401,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ).delete_by_file(file_path)
             console.print(f"[green]✓[/green] Deleted entries from {file_path}")
             log_command_success(
@@ -387,9 +425,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
         kbase_mode: str = typer.Option("chroma", "--mode", "-m", help="kbase mode: chroma or qdrant"),
         kbase_dir: str = typer.Option("~/.ksearch/kbase", "--kbase-dir", help="kbase directory"),
         qdrant_url: str = typer.Option("http://localhost:6333", "--qdrant-url", help="Qdrant URL"),
+        embedding_mode: str = typer.Option("ollama", "--embedding-mode", help="Embedding backend: ollama, sentence-transformers, or simple"),
         embedding_model: str = typer.Option("nomic-embed-text", "--embedding-model", help="Embedding model"),
         embedding_dimension: int = typer.Option(768, "--embedding-dimension", help="Embedding dimension"),
         ollama_url: str = typer.Option("http://localhost:11434", "--ollama-url", help="Ollama URL"),
+        allow_embedding_fallback: bool = typer.Option(False, "--allow-embedding-fallback/--strict-embedding", help="Allow fallback embeddings instead of fail-fast"),
         confirm: bool = typer.Option(False, "--confirm", help="Confirm kbase reset"),
     ):
         """Reset kbase data after changing embedding settings."""
@@ -399,9 +439,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ),
             command_context={"subcommand": "reset", "confirm": confirm},
         )
@@ -419,9 +461,11 @@ def register_kbase_commands(kbase_app: typer.Typer) -> None:
                 kbase_mode,
                 kbase_dir,
                 qdrant_url,
+                embedding_mode,
                 embedding_model,
                 embedding_dimension,
                 ollama_url,
+                allow_embedding_fallback,
             ).reset()
             console.print("[green]✓[/green] kbase reset")
             log_command_success(

@@ -128,6 +128,7 @@ class TestKnowledgeEmbeddingFactory:
         from ksearch.embeddings import build_kbase_embedding_function
 
         embed = build_kbase_embedding_function(
+            embedding_mode="simple",
             embedding_model="nomic-embed-text",
             embedding_dimension=128,
             ollama_url="http://invalid-url:99999",
@@ -135,3 +136,39 @@ class TestKnowledgeEmbeddingFactory:
 
         vector = embed("dimension compatible fallback")
         assert len(vector) == 128
+
+    def test_build_kbase_embedding_function_dimension_mismatch_fails(self, monkeypatch):
+        from ksearch.embeddings import build_kbase_embedding_function
+
+        class FakeResponse:
+            status_code = 200
+
+            def json(self):
+                return {"embedding": [0.1, 0.2]}
+
+        monkeypatch.setattr("requests.post", lambda *args, **kwargs: FakeResponse())
+        embed = build_kbase_embedding_function(
+            embedding_model="nomic-embed-text",
+            embedding_dimension=768,
+            ollama_url="http://localhost:11434",
+        )
+
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            embed("hello")
+
+    def test_build_kbase_embedding_function_non_200_fails(self, monkeypatch):
+        from ksearch.embeddings import build_kbase_embedding_function
+
+        class FakeResponse:
+            status_code = 400
+            text = "model does not support embeddings"
+
+        monkeypatch.setattr("requests.post", lambda *args, **kwargs: FakeResponse())
+        embed = build_kbase_embedding_function(
+            embedding_model="fredrezones55/qwen3.5-opus:9b",
+            embedding_dimension=768,
+            ollama_url="http://localhost:11434",
+        )
+
+        with pytest.raises(RuntimeError, match="does not support embeddings"):
+            embed("hello")

@@ -136,7 +136,7 @@ Use this when you already have local notes or previously ingested material.
 ### 3. kbase-only Semantic Retrieval
 
 ```bash
-kbase query "asyncio cancellation" --top-k 5
+ksearch kbase query "asyncio cancellation" --top-k 5
 ```
 
 Use this when you want semantic retrieval without new web fetching.
@@ -177,13 +177,13 @@ ollama pull gemma4:e2b
 ## Knowledge Base Commands
 
 ```bash
-kbase ingest ~/notes --source logseq --verbose
-kbase ingest ~/docs/readme.md --source manual
-kbase query "async programming best practices" --top-k 5
-kbase list
-kbase delete ~/old-notes/test.md
-kbase clear --confirm
-kbase reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
+ksearch kbase ingest ~/notes --source logseq --verbose
+ksearch kbase ingest ~/docs/readme.md --source manual
+ksearch kbase query "async programming best practices" --top-k 5
+ksearch kbase list
+ksearch kbase delete ~/old-notes/test.md
+ksearch kbase clear --confirm
+ksearch kbase reset --confirm --embedding-model nomic-embed-text --embedding-dimension 768
 ```
 
 ## Iterative Search
@@ -215,8 +215,8 @@ Example:
 
 ```bash
 ksearch config --embedding-model mxbai-embed-large --embedding-dimension 1024
-kbase reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
-kbase ingest ~/notes --source logseq
+ksearch kbase reset --confirm --embedding-model mxbai-embed-large --embedding-dimension 1024
+ksearch kbase ingest ~/notes --source logseq
 ```
 
 ## Docker Services
@@ -272,6 +272,7 @@ Default example:
   "embedding_model": "nomic-embed-text",
   "embedding_dimension": 768,
   "ollama_url": "http://localhost:11434",
+  "allow_embedding_fallback": false,
   "iterative_enabled": true,
   "max_iterations": 5,
   "max_time_seconds": 180,
@@ -321,7 +322,7 @@ All keys in `~/.ksearch/config.json` are optional. You can keep a sparse file an
 
 | Key | Default | Allowed / Type | What it does |
 | --- | --- | --- | --- |
-| `kbase_mode` | `chroma` | `chroma`, `qdrant`, `none` | Selects the kbase backend. `none` disables kbase retrieval. Iterative search requires `chroma` or `qdrant`. |
+| `kbase_mode` | `chroma` | `chroma`, `qdrant`, `none` | Selects the kbase backend. `none` disables kbase retrieval. Default `search` runs probe the backend and auto-disable kbase if it is unavailable. |
 | `kbase_dir` | `~/.ksearch/kbase` | Path string | Persistent storage directory for local kbase data and metadata. |
 | `kbase_top_k` | `5` | Integer >= 1 | Number of kbase hits returned and used during iterative sufficiency checks. |
 | `qdrant_url` | `http://localhost:6333` | URL string | Qdrant server address. Used only when `kbase_mode` is `qdrant`. |
@@ -334,12 +335,13 @@ All keys in `~/.ksearch/config.json` are optional. You can keep a sparse file an
 | `embedding_model` | `nomic-embed-text` | Model name string | Embedding model name used by the kbase. Changing it for an existing kbase requires rebuilding or resetting that kbase. |
 | `embedding_dimension` | `768` | Integer >= 1 | Expected embedding vector length. Must match the actual model output dimension stored in the kbase. |
 | `ollama_url` | `http://localhost:11434` | URL string | Ollama server address for embeddings, reranking, and content optimization. |
+| `allow_embedding_fallback` | `false` | Boolean | Allows sentence-transformers/simple fallback for kbase embeddings. Leave disabled in normal runs to fail fast on model or dimension errors. |
 
 #### Iterative Search
 
 | Key | Default | Allowed / Type | What it does |
 | --- | --- | --- | --- |
-| `iterative_enabled` | `true` | Boolean | Enables kbase-first iterative search. The engine checks kbase sufficiency first, then falls back to web search only when needed. |
+| `iterative_enabled` | `true` | Boolean | Enables kbase-first iterative search. The engine checks kbase sufficiency first, then falls back to web search only when needed. Default `search` runs auto-disable it when kbase is unavailable. |
 | `max_iterations` | `5` | Integer >= 1 | Upper bound on iterative search rounds after the initial kbase pass. |
 | `max_time_seconds` | `180` | Integer seconds | Time budget for one iterative search request. |
 | `fact_threshold` | `0.7` | Float | Sufficiency threshold for fact-style queries that need stronger evidence. |
@@ -351,7 +353,7 @@ All keys in `~/.ksearch/config.json` are optional. You can keep a sparse file an
 | Key | Default | Allowed / Type | What it does |
 | --- | --- | --- | --- |
 | `hybrid_search` | `true` | Boolean | Enables BM25 + vector hybrid retrieval inside the kbase. |
-| `rerank_enabled` | `true` | Boolean | Enables the Ollama reranker on top of retrieved kbase candidates. |
+| `rerank_enabled` | `true` | Boolean | Enables the Ollama reranker on top of retrieved kbase candidates. Default `search` runs auto-disable it when the Ollama rerank model is unavailable. |
 | `rerank_model` | `gemma4:e2b` | Model name string | Ollama model name used for reranking candidate passages. |
 | `bm25_top_k` | `20` | Integer >= 1 | Number of lexical BM25 candidates considered during hybrid retrieval. |
 | `vector_top_k` | `20` | Integer >= 1 | Number of vector-search candidates considered during hybrid retrieval. |
@@ -361,7 +363,7 @@ All keys in `~/.ksearch/config.json` are optional. You can keep a sparse file an
 
 | Key | Default | Allowed / Type | What it does |
 | --- | --- | --- | --- |
-| `optimization_enabled` | `true` | Boolean | Enables post-processing optimization for iterative search results. |
+| `optimization_enabled` | `true` | Boolean | Enables post-processing optimization for iterative search results. Default `search` runs auto-disable it when the Ollama optimization model is unavailable. |
 | `optimization_model` | `gemma4:e2b` | Model name string | Ollama model name used by the optimization/evaluation loop. |
 | `optimization_max_iterations` | `3` | Integer >= 1 | Max number of refinement rounds for content optimization. |
 | `optimization_confidence_threshold` | `0.8` | Float from `0.0` to `1.0` | Stops refinement once the evaluator reaches this confidence threshold. |

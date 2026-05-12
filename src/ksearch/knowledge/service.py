@@ -332,6 +332,7 @@ def build_knowledge_service(
     mode: str,
     persist_dir: str,
     collection_name: str,
+    embedding_mode: str,
     embedding_model: str,
     embedding_dimension: int,
     ollama_url: str,
@@ -339,6 +340,7 @@ def build_knowledge_service(
     id_generator: Callable[[str, str, int], str],
     entry_cls,
     result_cls,
+    allow_embedding_fallback: bool = False,
     reranker=None,
     use_hybrid: bool = True,
     use_rerank: bool = True,
@@ -352,9 +354,11 @@ def build_knowledge_service(
         qdrant_url=qdrant_url,
     )
     embed_text = build_kbase_embedding_function(
+        embedding_mode=embedding_mode,
         embedding_model=embedding_model,
         embedding_dimension=embedding_dimension,
         ollama_url=ollama_url,
+        allow_embedding_fallback=allow_embedding_fallback,
     )
     service = KnowledgeService(
         mode=mode,

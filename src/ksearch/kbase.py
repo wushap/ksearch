@@ -73,9 +73,11 @@ class KnowledgeBase:
         mode: str = "chroma",
         persist_dir: str = "~/.ksearch/kbase",
         qdrant_url: Optional[str] = None,
+        embedding_mode: str = "ollama",
         embedding_model: str = "nomic-embed-text",
         embedding_dimension: int = 768,
         ollama_url: str = "http://localhost:11434",
+        allow_embedding_fallback: bool = False,
         reranker=None,
         use_hybrid: bool = True,
         use_rerank: bool = True,
@@ -86,18 +88,22 @@ class KnowledgeBase:
             mode: "chroma" (embedded) or "qdrant" (server)
             persist_dir: Local directory for Chroma persistence
             qdrant_url: Qdrant server URL (required for qdrant mode)
+            embedding_mode: "ollama", "sentence-transformers", or "simple"
             embedding_model: Ollama embedding model name
             embedding_dimension: Expected embedding vector size
             ollama_url: Ollama server URL for embeddings
+            allow_embedding_fallback: Permit sentence-transformers/simple fallback
             reranker: Optional ReRanker instance for Ollama-based re-ranking
             use_hybrid: Enable BM25 + vector hybrid retrieval
             use_rerank: Enable Ollama-based re-ranking
         """
         self.mode = mode
         self.persist_dir = expand_path(persist_dir)
+        self.embedding_mode = embedding_mode
         self.embedding_model = embedding_model
         self.embedding_dimension = embedding_dimension
         self.ollama_url = ollama_url
+        self.allow_embedding_fallback = allow_embedding_fallback
         self.collection_name = "kbase"
         self.metadata_path = os.path.join(self.persist_dir, "_kbase_metadata.json")
         self.qdrant_url = qdrant_url
@@ -124,8 +130,10 @@ class KnowledgeBase:
             {
                 "mode": self.mode,
                 "persist_dir": self.persist_dir,
+                "embedding_mode": self.embedding_mode,
                 "embedding_model": self.embedding_model,
                 "embedding_dimension": self.embedding_dimension,
+                "allow_embedding_fallback": self.allow_embedding_fallback,
                 "use_hybrid": self.use_hybrid,
                 "use_rerank": self.use_rerank,
             },
@@ -137,6 +145,7 @@ class KnowledgeBase:
             mode="chroma",
             persist_dir=self.persist_dir,
             collection_name=self.collection_name,
+            embedding_mode=self.embedding_mode,
             embedding_model=self.embedding_model,
             embedding_dimension=self.embedding_dimension,
             ollama_url=self.ollama_url,
@@ -144,6 +153,7 @@ class KnowledgeBase:
             id_generator=self._generate_id,
             entry_cls=KnowledgeBaseEntry,
             result_cls=KnowledgeBaseSearchResult,
+            allow_embedding_fallback=self.allow_embedding_fallback,
             reranker=self.reranker,
             use_hybrid=self.use_hybrid,
             use_rerank=self.use_rerank,
@@ -157,6 +167,7 @@ class KnowledgeBase:
             mode="qdrant",
             persist_dir=self.persist_dir,
             collection_name=self.collection_name,
+            embedding_mode=self.embedding_mode,
             embedding_model=self.embedding_model,
             embedding_dimension=self.embedding_dimension,
             ollama_url=self.ollama_url,
@@ -164,6 +175,7 @@ class KnowledgeBase:
             id_generator=self._generate_id,
             entry_cls=KnowledgeBaseEntry,
             result_cls=KnowledgeBaseSearchResult,
+            allow_embedding_fallback=self.allow_embedding_fallback,
             reranker=self.reranker,
             use_hybrid=self.use_hybrid,
             use_rerank=self.use_rerank,

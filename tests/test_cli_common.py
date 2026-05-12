@@ -2,7 +2,9 @@
 
 from unittest.mock import patch
 
-from ksearch.cli_common import build_kbase
+import pytest
+
+from ksearch.cli_common import build_kbase, resolve_search_runtime_config
 
 
 def test_build_kbase_passes_ollama_url_to_reranker():
@@ -34,3 +36,50 @@ def test_build_kbase_passes_ollama_url_to_reranker():
     assert captured["reranker_kwargs"]["model_name"] == "gemma4:e2b"
     assert captured["reranker_kwargs"]["ollama_url"] == "http://ollama.internal:11434"
     assert captured["knowledge_base_kwargs"]["reranker"] is not None
+
+
+def test_build_kbase_rejects_none_mode():
+    with pytest.raises(ValueError, match="kbase_mode"):
+        build_kbase({"kbase_mode": "none"})
+
+
+def test_resolve_search_runtime_config_auto_disables_unavailable_default_features(monkeypatch):
+    monkeypatch.setattr("ksearch.cli_common._probe_kbase_backend", lambda config: (True, None))
+    monkeypatch.setattr("ksearch.cli_common._probe_kbase_embedding", lambda config: (False, "ollama unavailable"))
+    monkeypatch.setattr("ksearch.cli_common._probe_ollama_chat_model", lambda *args, **kwargs: (False, "model unavailable"))
+
+    effective, degradations = resolve_search_runtime_config(
+        {
+            "kbase_mode": "chroma",
+            "iterative_enabled": True,
+            "rerank_enabled": True,
+            "optimization_enabled": True,
+            "rerank_model": "gemma4:e2b",
+            "optimization_model": "gemma4:e2b",
+            "ollama_url": "http://localhost:11434",
+        },
+        explicit_flags=set(),
+    )
+
+    assert effective["kbase_mode"] == "none"
+    assert effective["iterative_enabled"] is False
+    assert effective["rerank_enabled"] is False
+    assert effective["optimization_enabled"] is False
+    assert degradations
+
+
+def test_resolve_search_runtime_config_rejects_explicit_iterative_when_kbase_unavailable(monkeypatch):
+    monkeypatch.setattr("ksearch.cli_common._probe_kbase_backend", lambda config: (True, None))
+    monkeypatch.setattr("ksearch.cli_common._probe_kbase_embedding", lambda config: (False, "ollama unavailable"))
+
+    with pytest.raises(RuntimeError, match="iterative"):
+        resolve_search_runtime_config(
+            {
+                "kbase_mode": "chroma",
+                "iterative_enabled": True,
+                "rerank_enabled": False,
+                "optimization_enabled": False,
+                "ollama_url": "http://localhost:11434",
+            },
+            explicit_flags={"iterative"},
+        )

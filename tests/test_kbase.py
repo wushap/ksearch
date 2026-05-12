@@ -8,6 +8,12 @@ from unittest.mock import patch
 from ksearch.kbase import KnowledgeBase, KnowledgeBaseEntry, KnowledgeBaseSearchResult
 
 
+def make_test_kbase(**kwargs):
+    kwargs.setdefault("mode", "chroma")
+    kwargs.setdefault("embedding_mode", "simple")
+    return KnowledgeBase(**kwargs)
+
+
 class TestKnowledgeBaseEntry:
     def test_kbase_entry_creation(self):
         """Test KnowledgeBaseEntry dataclass creation."""
@@ -46,7 +52,7 @@ class TestKnowledgeBaseChroma:
     def temp_kbase(self):
         """Create temporary kbase for testing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
             yield kbase
 
     def test_init_chroma(self, temp_kbase):
@@ -173,7 +179,7 @@ class TestKnowledgeBaseChunking:
     def temp_kbase(self):
         """Create temporary kbase for testing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
             yield kbase
 
     def test_chunk_short_text(self, temp_kbase):
@@ -236,14 +242,14 @@ class TestKnowledgeBaseServiceAssembly:
         from ksearch.knowledge.service import KnowledgeService
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
             assert isinstance(kbase._service, KnowledgeService)
 
 
 class TestKnowledgeBaseExtensionHooks:
     def test_ingest_file_honors_chunk_store_and_id_hooks(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
 
             with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as handle:
                 handle.write("# Hook Test\n\nOriginal content should be ignored by chunk hook.")
@@ -288,7 +294,7 @@ class TestKnowledgeBaseExtensionHooks:
                 with open(path, "w", encoding="utf-8") as handle:
                     handle.write(f"# {idx}\n\ncontent")
 
-            kbase = KnowledgeBase(mode="chroma", persist_dir=os.path.join(tmpdir, "kbase"))
+            kbase = make_test_kbase(persist_dir=os.path.join(tmpdir, "kbase"))
 
             calls = []
 
@@ -305,7 +311,7 @@ class TestKnowledgeBaseExtensionHooks:
 
     def test_search_honors_get_embedding_hook(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
 
             def raising_embedding_hook(text: str):
                 raise RuntimeError(f"hooked embedding for {text}")
@@ -317,7 +323,7 @@ class TestKnowledgeBaseExtensionHooks:
 
     def test_ingest_content_honors_get_embedding_hook(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
 
             def raising_embedding_hook(text: str):
                 raise RuntimeError(f"hooked embedding for {text}")
@@ -338,6 +344,7 @@ class TestKnowledgeBaseMetadata:
             kbase = KnowledgeBase(
                 mode="chroma",
                 persist_dir=tmpdir,
+                embedding_mode="simple",
                 embedding_model="nomic-embed-text",
                 embedding_dimension=768,
             )
@@ -352,6 +359,7 @@ class TestKnowledgeBaseMetadata:
             KnowledgeBase(
                 mode="chroma",
                 persist_dir=tmpdir,
+                embedding_mode="simple",
                 embedding_model="nomic-embed-text",
                 embedding_dimension=768,
             )
@@ -359,6 +367,7 @@ class TestKnowledgeBaseMetadata:
             reopened = KnowledgeBase(
                 mode="chroma",
                 persist_dir=tmpdir,
+                embedding_mode="simple",
                 embedding_model="nomic-embed-text",
                 embedding_dimension=768,
             )
@@ -372,6 +381,7 @@ class TestKnowledgeBaseMetadata:
             KnowledgeBase(
                 mode="chroma",
                 persist_dir=tmpdir,
+                embedding_mode="simple",
                 embedding_model="nomic-embed-text",
                 embedding_dimension=768,
             )
@@ -380,6 +390,7 @@ class TestKnowledgeBaseMetadata:
                 KnowledgeBase(
                     mode="chroma",
                     persist_dir=tmpdir,
+                    embedding_mode="simple",
                     embedding_model="nomic-embed-text",
                     embedding_dimension=1024,
                 )
@@ -390,6 +401,7 @@ class TestKnowledgeBaseMetadata:
             KnowledgeBase(
                 mode="chroma",
                 persist_dir=tmpdir,
+                embedding_mode="simple",
                 embedding_model="nomic-embed-text",
                 embedding_dimension=768,
             )
@@ -398,6 +410,7 @@ class TestKnowledgeBaseMetadata:
                 KnowledgeBase(
                     mode="chroma",
                     persist_dir=tmpdir,
+                    embedding_mode="simple",
                     embedding_model="mxbai-embed-large",
                     embedding_dimension=768,
                 )
@@ -417,7 +430,7 @@ class TestKnowledgeBaseStats:
             with open(file_two, "w", encoding="utf-8") as handle:
                 handle.write("# Two\n\nRust async cancellation guidance.")
 
-            kbase = KnowledgeBase(mode="chroma", persist_dir=os.path.join(tmpdir, "kbase"))
+            kbase = make_test_kbase(persist_dir=os.path.join(tmpdir, "kbase"))
             kbase.ingest_file(file_one, metadata={"source": "manual"})
             kbase.ingest_file(file_two, metadata={"source": "web"})
 
@@ -433,7 +446,7 @@ class TestKnowledgeBaseStats:
 class TestKnowledgeBaseContentIngest:
     def test_ingest_file_from_content_prefers_provided_file_path(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            kbase = KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+            kbase = make_test_kbase(persist_dir=tmpdir)
             provided_file_path = "/tmp/cache/abc123.md"
 
             ingested = kbase.ingest_file_from_content(
@@ -467,6 +480,6 @@ def test_kbase_logs_initialization_mode(monkeypatch):
     monkeypatch.setattr("ksearch.kbase.build_knowledge_service", lambda **kwargs: (FakeService(), FakeStore()))
 
     with tempfile.TemporaryDirectory() as tmpdir, patch("ksearch.kbase.log_event") as log_event:
-        KnowledgeBase(mode="chroma", persist_dir=tmpdir)
+        make_test_kbase(persist_dir=tmpdir)
 
     assert any(call.args[1] == "kbase_initialized" for call in log_event.call_args_list)
