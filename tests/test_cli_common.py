@@ -83,3 +83,20 @@ def test_resolve_search_runtime_config_rejects_explicit_iterative_when_kbase_una
             },
             explicit_flags={"iterative"},
         )
+
+
+def test_resolve_search_runtime_config_rejects_explicit_rerank_when_kbase_unavailable(monkeypatch):
+    monkeypatch.setattr("ksearch.cli_common._probe_kbase_backend", lambda config: (False, "backend unavailable"))
+    monkeypatch.setattr("ksearch.cli_common._probe_kbase_embedding", lambda config: (True, None))
+
+    with pytest.raises(RuntimeError, match="rerank"):
+        resolve_search_runtime_config(
+            {
+                "kbase_mode": "chroma",
+                "iterative_enabled": False,
+                "rerank_enabled": True,
+                "optimization_enabled": False,
+                "ollama_url": "http://localhost:11434",
+            },
+            explicit_flags={"rerank"},
+        )

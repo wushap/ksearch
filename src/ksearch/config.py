@@ -80,14 +80,17 @@ def load_config(config_path: str = "~/.ksearch/config.json") -> dict:
         return copy.deepcopy(DEFAULT_CONFIG)
 
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             file_config = json.load(f)
         for legacy_key, current_key in LEGACY_KEY_ALIASES.items():
             if legacy_key in file_config and current_key not in file_config:
                 file_config[current_key] = file_config[legacy_key]
         return file_config
-    except json.JSONDecodeError:
-        return copy.deepcopy(DEFAULT_CONFIG)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Invalid JSON in config file {config_path}: {exc.msg} "
+            f"(line {exc.lineno}, column {exc.colno})"
+        ) from exc
 
 
 def merge_config(cli_args: dict, file_config: dict, defaults: dict) -> dict:

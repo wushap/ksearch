@@ -199,12 +199,13 @@ def register_config_command(app: typer.Typer) -> None:
                     summary={"subcommand": "config", "action": "noop"},
                 )
         except Exception as exc:
+            console.print(f"[red]{exc}[/red]")
             log_command_failure(
                 "ksearch.cli.config",
                 error=exc,
                 summary={"subcommand": "config"},
             )
-            raise
+            raise typer.Exit(1)
 
 
 def register_health_command(app: typer.Typer) -> None:

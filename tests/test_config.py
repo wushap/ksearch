@@ -5,6 +5,8 @@ import tempfile
 import os
 from pathlib import Path
 
+import pytest
+
 from ksearch.config import (
     DEFAULT_CONFIG,
     load_config,
@@ -62,6 +64,16 @@ def test_load_config_missing_file():
         config_path = os.path.join(tmpdir, "nonexistent.json")
         result = load_config(config_path)
         assert result == DEFAULT_CONFIG
+
+
+def test_load_config_invalid_json_raises_value_error():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = os.path.join(tmpdir, "invalid.json")
+        with open(config_path, "w", encoding="utf-8") as handle:
+            handle.write("{ invalid json")
+
+        with pytest.raises(ValueError, match="Invalid JSON in config file"):
+            load_config(config_path)
 
 
 def test_merge_config_cli_overrides_file():

@@ -113,6 +113,8 @@ def resolve_search_runtime_config(
                 raise RuntimeError(f"iterative requires available kbase: {reason}")
             if "kbase" in explicit_flags:
                 raise RuntimeError(f"kbase requested via --kbase is unavailable: {reason}")
+            if "rerank" in explicit_flags:
+                raise RuntimeError(f"rerank requested via --rerank requires available kbase: {reason}")
             degradations.append({"feature": "kbase", "reason": reason or "unavailable"})
             effective["kbase_mode"] = "none"
             effective["iterative_enabled"] = False
@@ -126,6 +128,12 @@ def resolve_search_runtime_config(
         degradations.append({"feature": "iterative", "reason": "kbase unavailable"})
         effective["iterative_enabled"] = False
         effective["optimization_enabled"] = False
+
+    if effective.get("rerank_enabled") and effective.get("kbase_mode") == "none":
+        if "rerank" in explicit_flags:
+            raise RuntimeError("rerank requested via --rerank requires available kbase")
+        degradations.append({"feature": "rerank", "reason": "kbase unavailable"})
+        effective["rerank_enabled"] = False
 
     if effective.get("rerank_enabled") and effective.get("kbase_mode") != "none":
         rerank_ok, rerank_reason = _probe_ollama_chat_model(

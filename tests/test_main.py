@@ -367,6 +367,68 @@ def test_search_command_explicit_iterative_reports_probe_failure(monkeypatch):
     assert "iterative requires available kbase" in result.output
 
 
+def test_search_command_invalid_config_reports_error(monkeypatch):
+    monkeypatch.setattr(
+        "ksearch.cli.search.load_config",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("Invalid JSON in config file /tmp/bad.json: expected property name")
+        ),
+    )
+
+    result = runner.invoke(app, ["search", "broken config"])
+
+    assert result.exit_code == 1
+    assert "Invalid JSON in config file /tmp/bad.json" in result.output
+
+
+def test_kbase_query_command_uses_config_file_defaults(monkeypatch):
+    captured = {}
+    sentinel_reranker = object()
+
+    class FakeKB:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def search(self, *_args, **_kwargs):
+            return []
+
+    monkeypatch.setattr(
+        "ksearch.cli.kbase.load_config",
+        lambda *_args, **_kwargs: {
+            "kbase_mode": "chroma",
+            "kbase_dir": "/tmp/configured-kbase",
+            "embedding_mode": "simple",
+            "embedding_model": "configured-embedder",
+            "embedding_dimension": 384,
+            "ollama_url": "http://ollama.internal:11434",
+            "allow_embedding_fallback": True,
+            "hybrid_search": False,
+            "rerank_enabled": True,
+            "rerank_model": "configured-reranker",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "ksearch.cli.kbase._build_reranker",
+        lambda config: sentinel_reranker,
+        raising=False,
+    )
+    monkeypatch.setattr("ksearch.cli_kbase.KnowledgeBase", FakeKB)
+
+    result = runner.invoke(app, ["kbase", "query", "configured defaults"])
+
+    assert result.exit_code == 0
+    assert captured["persist_dir"] == "/tmp/configured-kbase"
+    assert captured["embedding_mode"] == "simple"
+    assert captured["embedding_model"] == "configured-embedder"
+    assert captured["embedding_dimension"] == 384
+    assert captured["ollama_url"] == "http://ollama.internal:11434"
+    assert captured["allow_embedding_fallback"] is True
+    assert captured["use_hybrid"] is False
+    assert captured["use_rerank"] is True
+    assert captured["reranker"] is sentinel_reranker
+
+
 def test_query_command_searches_kbase_entries():
     with tempfile.TemporaryDirectory() as tmpdir:
         kbase_dir = os.path.join(tmpdir, "kbase")

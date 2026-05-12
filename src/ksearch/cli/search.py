@@ -58,66 +58,66 @@ def register_search_command(app: typer.Typer) -> None:
         verbose: Optional[bool] = typer.Option(None, "--verbose/--no-verbose", "-v", help="Verbose output"),
     ):
         """Search for keyword in cache, kbase, and/or network."""
-        file_config = load_config("~/.ksearch/config.json")
-
-        cli_args = {}
-        if no_cache is not None:
-            cli_args["no_cache"] = no_cache
-        if only_cache is not None:
-            cli_args["only_cache"] = only_cache
-        if verbose is not None:
-            cli_args["verbose"] = verbose
-        if iterative is not None:
-            cli_args["iterative_enabled"] = iterative
-        if hybrid is not None:
-            cli_args["hybrid_search"] = hybrid
-        if rerank is not None:
-            cli_args["rerank_enabled"] = rerank
-        if allow_embedding_fallback is not None:
-            cli_args["allow_embedding_fallback"] = allow_embedding_fallback
-        optional_values = {
-            "format": output_format,
-            "time_range": time_range,
-            "max_results": max_results,
-            "searxng_url": searxng_url,
-            "store_dir": store_dir,
-            "index_db": index_db,
-            "timeout": timeout,
-            "kbase_mode": kbase_mode,
-            "kbase_dir": kbase_dir,
-            "qdrant_url": qdrant_url,
-            "embedding_mode": embedding_mode,
-            "embedding_model": embedding_model,
-            "embedding_dimension": embedding_dimension,
-            "ollama_url": ollama_url,
-        }
-        for key, value in optional_values.items():
-            if value is not None:
-                cli_args[key] = value
-
-        config = merge_config(cli_args, file_config, DEFAULT_CONFIG)
-        explicit_flags = set()
-        if kbase_mode is not None and kbase_mode != "none":
-            explicit_flags.add("kbase")
-        if iterative is True:
-            explicit_flags.add("iterative")
-        if rerank is True:
-            explicit_flags.add("rerank")
-        log_command_start(
-            "ksearch.cli.search",
-            config_snapshot=config,
-            command_context={
-                "keyword": keyword,
-                "format": config["format"],
-                "verbose": config.get("verbose", False),
-                "no_cache": config.get("no_cache", False),
-                "only_cache": config.get("only_cache", False),
-                "only_kbase": config.get("only_kbase", False),
-                "kbase_mode": config.get("kbase_mode"),
-            },
-        )
-
         try:
+            file_config = load_config("~/.ksearch/config.json")
+
+            cli_args = {}
+            if no_cache is not None:
+                cli_args["no_cache"] = no_cache
+            if only_cache is not None:
+                cli_args["only_cache"] = only_cache
+            if verbose is not None:
+                cli_args["verbose"] = verbose
+            if iterative is not None:
+                cli_args["iterative_enabled"] = iterative
+            if hybrid is not None:
+                cli_args["hybrid_search"] = hybrid
+            if rerank is not None:
+                cli_args["rerank_enabled"] = rerank
+            if allow_embedding_fallback is not None:
+                cli_args["allow_embedding_fallback"] = allow_embedding_fallback
+            optional_values = {
+                "format": output_format,
+                "time_range": time_range,
+                "max_results": max_results,
+                "searxng_url": searxng_url,
+                "store_dir": store_dir,
+                "index_db": index_db,
+                "timeout": timeout,
+                "kbase_mode": kbase_mode,
+                "kbase_dir": kbase_dir,
+                "qdrant_url": qdrant_url,
+                "embedding_mode": embedding_mode,
+                "embedding_model": embedding_model,
+                "embedding_dimension": embedding_dimension,
+                "ollama_url": ollama_url,
+            }
+            for key, value in optional_values.items():
+                if value is not None:
+                    cli_args[key] = value
+
+            config = merge_config(cli_args, file_config, DEFAULT_CONFIG)
+            explicit_flags = set()
+            if kbase_mode is not None and kbase_mode != "none":
+                explicit_flags.add("kbase")
+            if iterative is True:
+                explicit_flags.add("iterative")
+            if rerank is True:
+                explicit_flags.add("rerank")
+            log_command_start(
+                "ksearch.cli.search",
+                config_snapshot=config,
+                command_context={
+                    "keyword": keyword,
+                    "format": config["format"],
+                    "verbose": config.get("verbose", False),
+                    "no_cache": config.get("no_cache", False),
+                    "only_cache": config.get("only_cache", False),
+                    "only_kbase": config.get("only_kbase", False),
+                    "kbase_mode": config.get("kbase_mode"),
+                },
+            )
+
             config, capability_degradations = resolve_search_runtime_config(config, explicit_flags)
             cache = CacheManager(config["index_db"], config["store_dir"])
             searxng = SearXNGClient(config["searxng_url"], config["timeout"])
@@ -217,6 +217,14 @@ def register_search_command(app: typer.Typer) -> None:
         except typer.Exit:
             raise
         except RuntimeError as exc:
+            console.print(f"[red]{exc}[/red]")
+            log_command_failure(
+                "ksearch.cli.search",
+                error=exc,
+                summary={"keyword": keyword},
+            )
+            raise typer.Exit(1)
+        except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             log_command_failure(
                 "ksearch.cli.search",
