@@ -14,6 +14,8 @@ class SufficiencyEvaluator:
 
     FACT_THRESHOLD = 0.7
     EXPLORATION_THRESHOLD = 0.4
+    MIN_AVG_RELEVANCE = 0.2
+    MIN_TOP_RELEVANCE = 0.45
 
     MIN_RESULTS_FOR_MAX_SCORE = 10
     MIN_RESULTS_FOR_MIN_SCORE = 3
@@ -41,8 +43,19 @@ class SufficiencyEvaluator:
         if not kbase_results:
             return 0.0
 
-        avg_similarity = sum(result.score for result in kbase_results) / len(kbase_results)
+        relevance_scores = [self._relevance_score(result) for result in kbase_results]
+        avg_similarity = sum(relevance_scores) / len(relevance_scores)
+        top_similarity = max(relevance_scores)
         similarity_component = avg_similarity * self.vector_weight
+
+        # Count and content length should only help once the retrieved set is
+        # meaningfully relevant to the query. Otherwise long off-topic chunks
+        # can incorrectly block the web fallback path.
+        if (
+            avg_similarity < self.MIN_AVG_RELEVANCE
+            or top_similarity < self.MIN_TOP_RELEVANCE
+        ):
+            return similarity_component
 
         count = len(kbase_results)
         if count >= self.MIN_RESULTS_FOR_MAX_SCORE:
@@ -67,6 +80,20 @@ class SufficiencyEvaluator:
 
     def is_sufficient(self, score: float, threshold: float) -> bool:
         return score >= threshold
+
+    @staticmethod
+    def _relevance_score(result: KnowledgeBaseSearchResult) -> float:
+        metadata = result.metadata or {}
+
+        rerank_score = metadata.get("rerank_score")
+        if rerank_score is not None:
+            return float(rerank_score)
+
+        vector_score = metadata.get("vector_score")
+        if vector_score is not None and float(vector_score) > 0:
+            return float(vector_score)
+
+        return max(float(result.score), 0.0)
 
 
 __all__ = ["SufficiencyEvaluator"]

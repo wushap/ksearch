@@ -237,6 +237,18 @@ class KnowledgeService:
         # Convert dicts to result objects
         search_results = []
         for doc in candidate_dicts:
+            metadata = dict(doc.get("metadata", {}) or {})
+            if doc.get("score") is not None:
+                metadata["retrieval_score"] = float(doc["score"])
+            if doc.get("bm25_score") is not None:
+                metadata["bm25_score"] = float(doc["bm25_score"])
+            if doc.get("vector_score") is not None:
+                metadata["vector_score"] = float(doc["vector_score"])
+            elif doc.get("score") is not None and not self.use_hybrid:
+                metadata["vector_score"] = float(doc["score"])
+            if doc.get("rerank_score") is not None:
+                metadata["rerank_score"] = float(doc["rerank_score"])
+
             search_results.append(
                 self.result_cls(
                     id=doc.get("id", ""),
@@ -245,7 +257,7 @@ class KnowledgeService:
                     title=doc.get("title"),
                     source=doc.get("source"),
                     score=doc.get("score", 0.0),
-                    metadata=doc.get("metadata", {}),
+                    metadata=metadata,
                 )
             )
         return search_results

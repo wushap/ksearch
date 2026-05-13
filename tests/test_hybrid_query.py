@@ -247,6 +247,45 @@ def test_knowledge_service_logs_hybrid_candidate_counts():
     assert "candidate_dicts_ready" in names
 
 
+def test_knowledge_service_preserves_relevance_signals_in_result_metadata():
+    vector_store = Mock()
+    vector_store.bm25.size = 3
+    vector_store.hybrid_query.return_value = [
+        {
+            "id": "a",
+            "content": "asyncio cancellation propagation",
+            "score": 0.024,
+            "vector_score": 0.61,
+            "bm25_score": 4.2,
+            "rerank_score": 0.82,
+            "file_path": "/tmp/a.md",
+            "title": "A",
+            "source": "manual",
+            "metadata": {"existing": "value"},
+        }
+    ]
+
+    service = KnowledgeService(
+        mode="chroma",
+        vector_store=vector_store,
+        embed_text=lambda text: [0.1, 0.2],
+        id_generator=lambda file_path, content, chunk_index: "id",
+        entry_cls=dict,
+        result_cls=lambda **kwargs: kwargs,
+        reranker=None,
+        use_hybrid=True,
+        use_rerank=False,
+    )
+
+    results = service.search("asyncio cancellation", top_k=1, embedding_fn=lambda text: [0.1, 0.2])
+
+    assert results[0]["metadata"]["existing"] == "value"
+    assert results[0]["metadata"]["retrieval_score"] == pytest.approx(0.024)
+    assert results[0]["metadata"]["vector_score"] == pytest.approx(0.61)
+    assert results[0]["metadata"]["bm25_score"] == pytest.approx(4.2)
+    assert results[0]["metadata"]["rerank_score"] == pytest.approx(0.82)
+
+
 def test_hybrid_query_logs_bm25_and_vector_counts():
     def make_embedding(seed: int) -> list[float]:
         vec = [float((seed * (i + 1)) % 10) / 10.0 for i in range(8)]

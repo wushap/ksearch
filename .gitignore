@@ -24,3 +24,5 @@ htmlcov/
 
 # User data (not part of project)
 .kb/
+AGENTS.md
+/ example.txt

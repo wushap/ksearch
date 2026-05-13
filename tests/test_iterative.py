@@ -380,6 +380,14 @@ class TestSufficiencyEvaluator:
         # Total ~0.41
         assert score < 0.6
 
+    def test_score_stays_below_exploration_threshold_for_low_relevance_results(self, evaluator):
+        """Long low-relevance results should not become sufficient from count + coverage alone."""
+        results = [self.make_kbase_result(0.1, "x" * 800) for _ in range(5)]
+
+        score = evaluator.score(results)
+
+        assert score < evaluator.EXPLORATION_THRESHOLD
+
     def test_get_threshold_for_fact_queries(self, evaluator):
         """Test get_threshold for fact queries."""
         threshold = evaluator.get_threshold("fact")
@@ -527,6 +535,16 @@ class TestIterativeSearchEngine:
             engine.search("how to cancel asyncio tasks")
 
         assert any(call.args[1] == "sufficiency_evaluated" for call in log_event.call_args_list)
+
+    def test_search_falls_back_to_web_for_low_relevance_kbase_results(self, engine):
+        """Low relevance local hits should trigger web fallback even when coverage is high."""
+        kbase_results = [self.make_kbase_result(0.1, idx=i) for i in range(5)]
+        engine.kbase.search = Mock(side_effect=[kbase_results, kbase_results])
+
+        results = engine.search("llm api json format detail tool use")
+
+        engine.searxng.search.assert_called_once()
+        assert any(not entry.cached for entry in results)
 
     def test_search_optimizes_sufficient_kbase_results_when_enabled(self, engine):
         """Test optimization runs even when initial kbase results are already sufficient."""
